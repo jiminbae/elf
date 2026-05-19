@@ -25,6 +25,36 @@ function mapSubmission(item) {
 export const dbService = {
   // 1. Fetch Assignments
   async getAssignments() {
+    if (!supabase) {
+      console.warn("Supabase client is null. Using fallback assignments mock data.");
+      return [
+        {
+          id: "essay",
+          course: "인문대 교양 | 003 분반 (World Literature | 003 Section)",
+          courseShort: "세계문학의 이해",
+          title: "카프카 『변신』 감상문 — 세계문학의 이해",
+          deadline: "5월 26일 오후 11:59",
+          avg: 7.4,
+          aiAvg: 7.3,
+          graded: 12,
+          total: 45,
+          type: "essay",
+        },
+        {
+          id: "code",
+          course: "공과대 전공 | 001 분반 (Data Structures | 001 Section)",
+          courseShort: "자료구조 입문",
+          title: "스택 클래스 구현 — Github 기반 협업 팀과제",
+          deadline: "5월 26일 오후 11:59",
+          avg: 7.2,
+          aiAvg: 7.0,
+          graded: 5,
+          total: 32,
+          type: "code",
+        }
+      ];
+    }
+
     try {
       const { data, error } = await supabase
         .from('assignments')
@@ -81,6 +111,11 @@ export const dbService = {
 
   // 2. Fetch Students / Submissions for a specific Assignment
   async getSubmissions(assignmentId) {
+    if (!supabase) {
+      console.warn(`Supabase client is null. Using fallback submissions mock data for ${assignmentId}.`);
+      return assignmentId === 'essay' ? MOCK.TA_STUDENTS_ESSAY : MOCK.CODE_STUDENTS;
+    }
+
     try {
       const { data, error } = await supabase
         .from('submissions')
@@ -102,6 +137,11 @@ export const dbService = {
 
   // 3. Fetch detailed contents of a specific submission
   async getSubmissionContent(submissionId, assignmentType) {
+    if (!supabase) {
+      console.warn(`Supabase client is null. Using fallback detailed submission content for submission ${submissionId}.`);
+      return assignmentType === 'essay' ? MOCK.ESSAY_DOC : MOCK.CODE_SUBMISSION;
+    }
+
     try {
       const { data, error } = await supabase
         .from('submission_contents')
@@ -138,6 +178,11 @@ export const dbService = {
 
   // 4. Update submission scores and status
   async updateGrade(submissionId, score, status = 'graded') {
+    if (!supabase) {
+      console.warn("Supabase client is null. Grade updated locally only.");
+      return { success: false, error: 'Supabase client not initialized' };
+    }
+
     try {
       const { data, error } = await supabase
         .from('submissions')
@@ -161,6 +206,11 @@ export const dbService = {
 
   // 5. Fetch student dashboard assignments
   async getStudentAssignments(studentNo = '20234113') {
+    if (!supabase) {
+      console.warn("Supabase client is null. Using fallback student assignments mock data.");
+      return MOCK.STUDENT_ASSIGNMENTS;
+    }
+
     try {
       // Find student first
       const { data: student } = await supabase
