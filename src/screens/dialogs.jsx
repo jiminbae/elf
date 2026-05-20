@@ -47,12 +47,12 @@ export function SimilarityDialog({ open, onClose }) {
           <div className="warn-ico" style={{ background: "var(--ai-50)", color: "var(--ai-700)" }}><Icon.users width="20" height="20" /></div>
           <div>
             <h3>유사도 비교 — 나란히 보기</h3>
-            <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 2 }}>정성훈 (학생 13) ↔ 강하늘 (학생 6) · 문장 단위 유사도 8.7%</div>
+            <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 2 }}>현재 학생 ↔ 비교 대상 · 유사도 정보</div>
           </div>
           <button className="btn btn--quiet btn--icon" style={{ marginLeft: "auto" }} onClick={onClose}><Icon.chevR width="16" height="16" style={{ transform: "rotate(45deg)" }} /></button>
         </div>
         <div style={{ padding: "0 22px 6px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          {[{ who: "정성훈 (현재 학생)" }, { who: "강하늘 (학생 6)" }].map((c, i) => (
+          {[{ who: "현재 학생" }, { who: "비교 대상" }].map((c, i) => (
             <div key={i} style={{ border: "1px solid var(--ink-200)", borderRadius: 10, padding: 14, fontSize: 13, lineHeight: 1.7, background: "var(--paper)", minHeight: 240 }}>
               <div style={{ fontSize: 11.5, color: "var(--ink-500)", fontWeight: 700, textTransform: "uppercase", marginBottom: 8 }}>{c.who}</div>
               <p style={{ margin: "0 0 8px" }}>… 그레고르 역시 가족을 부양하기 위해 자신을 희생하며 일했지만 결국 그 노동의 의미를 찾지 못한다. </p>

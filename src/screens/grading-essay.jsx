@@ -1,21 +1,18 @@
 import React from 'react';
 import { Icon } from '../icons';
-import { MOCK } from '../data';
 
-export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpenSimilarity, submissionContent, focusedStudent }) {
+export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpenSimilarity, onRegenerate, submissionContent, focusedStudent }) {
   const [tab, setTab] = React.useState("submission");      // submission / ai / similarity
   const [editing, setEditing] = React.useState(false);
   const [tone, setTone] = React.useState("중립");
   const [openPop, setOpenPop] = React.useState("greteQuote"); // null | run.note
-  const [scores, setScores] = React.useState({ a: 2.5, b: 2, c: 1.5, d: 1.5 });
-  const [final, setFinal] = React.useState(7.5);
-  const [draft, setDraft] = React.useState(
-    "카프카 「변신」의 핵심 주제인 소외를 가족·노동·자아의 세 층위로 정리한 구조가 명확합니다. 특히 2문단에서 그레테의 발화를 직접 인용해 가족 내 소외를 분석한 부분이 인상적이에요. 다만 3문단의 노동 소외 분석은 마르크스 이론을 일반론으로만 언급하고 있어 작품 텍스트와의 연결이 약합니다. 그레고르의 영업사원 일상이나 회사 지배인의 등장 장면 같은 구체적 텍스트와 연결시켜보면 분석이 한층 깊어질 거예요. 결론에서는 도입부에서 제시한 세 층위를 다시 종합해보면 좋겠습니다."
-  );
+  const [scores, setScores] = React.useState({ a: 0, b: 0, c: 0, d: 0 });
+  const [final, setFinal] = React.useState(0);
+  const [draft, setDraft] = React.useState("");
 
   React.useEffect(() => {
     if (focusedStudent) {
-      setFinal(focusedStudent.finalScore !== null ? focusedStudent.finalScore : (focusedStudent.aiScore || 7.5));
+      setFinal(focusedStudent.finalScore ?? focusedStudent.aiScore ?? 0);
     }
   }, [focusedStudent]);
 
@@ -35,7 +32,8 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
       setDraft={setDraft}
       finalScore={final}
       setFinalScore={setFinal}
-      onApprove={() => onApprove && onApprove(final)}
+      onApprove={onApprove}
+      onRegenerate={onRegenerate}
       onOpenWarn={onOpenWarn}
       onOpenSimilarity={onOpenSimilarity}
     />
@@ -77,12 +75,12 @@ function Tabs({ tab, setTab, kind }) {
   const items = kind === "essay"
     ? [
       { k: "submission", lbl: "제출물" },
-      { k: "ai", lbl: "AI 분석 보기", badge: <span className="badge badge--ai">3</span> },
+      { k: "ai", lbl: "AI 분석 보기" },
       { k: "similarity", lbl: "유사도 분석" },
     ]
     : [
       { k: "submission", lbl: "제출물" },
-      { k: "ai", lbl: "실행 결과", badge: <span className="badge badge--good">4/5</span> },
+      { k: "ai", lbl: "실행 결과" },
       { k: "similarity", lbl: "유사도 분석" },
     ];
   return (
@@ -98,29 +96,32 @@ function Tabs({ tab, setTab, kind }) {
 
 // ---------- Essay submission body ----------
 function EssaySubmission({ openPop, setOpenPop, essayDoc, focusedStudent }) {
-  const doc = essayDoc || MOCK.ESSAY_DOC;
+  const doc = essayDoc;
   const student = focusedStudent || {};
+  if (!doc) {
+    return <div className="card card-pad">불러온 제출 내용이 없습니다.</div>;
+  }
   return (
     <div className="card">
       <div className="sub-meta">
         <div className="file-ico"><Icon.doc width="16" height="16" /></div>
         <div>
-          <div className="title">변신_감상문_{student.name || '정성훈'}.docx</div>
+          <div className="title">{doc.filename || `제출물_${student.name || student.no || 'student'}`}</div>
         </div>
-        <span className="dot-sep" />
-        <span>3페이지</span>
-        <span className="dot-sep" />
-        <span>1,834자</span>
+        {doc.pages ? <><span className="dot-sep" /><span>{doc.pages}페이지</span></> : null}
+        {doc.bytes || doc.characters ? <><span className="dot-sep" /><span>{doc.characters || doc.bytes}자</span></> : null}
         <span className="spacer" />
-        <span style={{ fontSize: 12, color: "var(--ink-500)" }}>제출: {student.submittedAt || '5월 22일 오후 9:14'}</span>
+        <span style={{ fontSize: 12, color: "var(--ink-500)" }}>제출: {student.submittedAt || doc.submittedAt || '-'}</span>
         <button className="btn btn--quiet btn--sm btn--icon"><Icon.download width="16" height="16" /></button>
       </div>
 
       <div className="essay-body">
-        <h1>{doc.title}</h1>
-        <div className="byline">{doc.author || `${student.name} (${student.no || '2023####13'})`} · {doc.course || '세계문학의 이해 감상문 과제'}</div>
+        <h1>{doc.title || '제출물'}</h1>
+        <div className="byline">{doc.author || `${student.name || '학생'} (${student.no || '-'})`} {doc.course ? `· ${doc.course}` : ''}</div>
 
-        {(doc.paragraphs || []).map((p, i) => {
+        {(doc.paragraphs || []).length === 0 ? (
+          <div className="empty">표시할 본문이 없습니다.</div>
+        ) : (doc.paragraphs || []).map((p, i) => {
           if (Array.isArray(p)) {
             return (
               <div className="essay-p" key={i}>
@@ -135,7 +136,7 @@ function EssaySubmission({ openPop, setOpenPop, essayDoc, focusedStudent }) {
             <div className="ai-flag-block" key={i}>
               <span className="flag-tag"><Icon.spark width="11" height="11" />{p.flagLabel}</span>
               <div className="essay-p" style={{ marginBottom: 0 }}>
-                {p.runs.map((r, j) => <Run key={j} run={r} openPop={openPop} setOpenPop={setOpenPop} />)}
+                {(p.runs || []).map((r, j) => <Run key={j} run={r} openPop={openPop} setOpenPop={setOpenPop} />)}
               </div>
             </div>
           );
@@ -173,8 +174,8 @@ function InlinePop({ note, hl, onClose }) {
     },
     greteQuote: {
       kind: "인용 검증",
-      title: "원문과 일치 — 그레테 발화",
-      body: "「변신」 3장 후반부 그레테의 발화와 일치합니다. 인용 위치·맥락 모두 정확하게 사용되었고, 출처 표기는 누락되어 있으나 본문 흐름상 문제 없음."
+      title: "인용 검증 결과",
+      body: "해당 인용에 대한 검증 결과가 표시됩니다."
     },
   }[note];
   if (!data) return null;
@@ -268,13 +269,11 @@ function SimilarityPane({ onOpenSimilarity }) {
     <div className="card card-pad">
       <h3>학생 간 유사도 분석</h3>
       <p style={{ color: "var(--ink-600)", fontSize: 13, marginTop: 6 }}>
-        같은 분반(28명) 내에서 문장·단락 단위 유사도가 9% 이상인 학생만 표시합니다.
+        실제 유사도 분석 결과가 있을 때 표시됩니다.
       </p>
-      <div style={{ marginTop: 16 }}>
+      <div className="empty" style={{ marginTop: 16 }}>표시할 유사도 분석 결과가 없습니다.</div>
+      <div style={{ marginTop: 16, display: "none" }}>
         {[
-          { name: "강하늘 (학생 6)", sim: 8.7, common: 1, tone: "warn" },
-          { name: "윤예진 (학생 7)", sim: 6.2, common: 1, tone: "" },
-          { name: "백나연 (학생 12)", sim: 5.8, common: 1, tone: "" },
         ].map((r, i) => (
           <div key={i} style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr auto", gap: 16, alignItems: "center", padding: "12px 0", borderBottom: "1px solid var(--ink-150)" }}>
             <div>
@@ -305,17 +304,47 @@ function AIPanel({
   tab, editing, setEditing,
   scores, setScores, tone, setTone,
   draft, setDraft,
-  finalScore, setFinalScore, onApprove, onOpenWarn, onOpenSimilarity,
+  finalScore, setFinalScore, onApprove, onRegenerate, onOpenWarn, onOpenSimilarity,
 }) {
+  const [regenerating, setRegenerating] = React.useState(false);
   const aiRecommended = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
   const sameAsAI = finalScore === aiRecommended;
+  const rubricItems = [
+    { k: "a", name: "논지의 명확성", max: 3 },
+    { k: "b", name: "근거의 적절성", max: 3, warn: true },
+    { k: "c", name: "논리적 구성", max: 2 },
+    { k: "d", name: "문장 표현", max: 2 },
+  ];
+  const handleRegenerate = async () => {
+    if (!onRegenerate || regenerating) return;
+
+    setRegenerating(true);
+    try {
+      const nextDraft = await onRegenerate(tone);
+      if (nextDraft) setDraft(nextDraft);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const buildApproval = () => ({
+    finalScore,
+    aiScore: aiRecommended,
+    taFeedback: draft,
+    tone,
+    scoreScale: 10,
+    categoryScores: rubricItems.map(item => ({
+      name: item.name,
+      score: scores[item.k],
+      max_score: item.max,
+    })),
+  });
 
   return (
     <div className="aipanel">
       <div className="aipanel__hd">
         <Icon.spark width="14" height="14" style={{ color: "var(--ai-700)" }} />
         <h3>AI 채점 보조</h3>
-        <span className="model">Claude Sonnet 4.6</span>
       </div>
 
       <div className="aiscore">
@@ -326,12 +355,7 @@ function AIPanel({
       </div>
 
       <div className="rubric">
-        {[
-          { k: "a", name: "논지의 명확성", max: 3 },
-          { k: "b", name: "근거의 적절성", max: 3, warn: true },
-          { k: "c", name: "논리적 구성", max: 2 },
-          { k: "d", name: "문장 표현", max: 2 },
-        ].map(r => (
+        {rubricItems.map(r => (
           <div key={r.k} className={"rubric__row" + (editing ? " editing" : "")}>
             <span className="name">{r.name}</span>
             {editing ? (
@@ -395,7 +419,9 @@ function AIPanel({
         <div className="draft__hd">
           <Icon.msg width="13" height="13" style={{ color: "var(--ink-600)" }} />
           <h4>AI 피드백 초안 <span style={{ fontWeight: 400, color: "var(--ink-500)" }}>(수정 가능)</span></h4>
-          <button className="regen"><Icon.refresh width="12" height="12" /> 재생성</button>
+          <button className="regen" onClick={handleRegenerate} disabled={regenerating}>
+            <Icon.refresh width="12" height="12" /> {regenerating ? "재생성 중" : "재생성"}
+          </button>
         </div>
         <textarea value={draft} onChange={e => setDraft(e.target.value)} />
       </div>
@@ -417,7 +443,7 @@ function AIPanel({
       </div>
 
       <div className="actions-row">
-        <button className="btn btn--primary" onClick={onApprove}>
+        <button className="btn btn--primary" onClick={() => onApprove && onApprove(buildApproval())}>
           승인 & 다음 학생 <Icon.arrowR width="14" height="14" />
         </button>
         <button className="btn btn--ghost" onClick={() => setEditing(v => !v)}>

@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { MOCK } from '../data';
+import { n8nService } from './n8n';
 
 // Helper to safely format submission from DB structure to application structure
 function mapSubmission(item) {
@@ -23,36 +23,43 @@ function mapSubmission(item) {
 }
 
 export const dbService = {
+  async createAssignment(payload) {
+    return n8nService.createAssignment(payload);
+  },
   // 1. Fetch Assignments
   async getAssignments() {
-    if (!supabase) {
-      console.warn("Supabase client is null. Using fallback assignments mock data.");
-      return [
-        {
-          id: "essay",
-          course: "인문대 교양 | 003 분반 (World Literature | 003 Section)",
-          courseShort: "세계문학의 이해",
-          title: "카프카 『변신』 감상문 — 세계문학의 이해",
-          deadline: "5월 26일 오후 11:59",
-          avg: 7.4,
-          aiAvg: 7.3,
-          graded: 12,
-          total: 45,
-          type: "essay",
-        },
-        {
-          id: "code",
-          course: "공과대 전공 | 001 분반 (Data Structures | 001 Section)",
-          courseShort: "자료구조 입문",
-          title: "스택 클래스 구현 — Github 기반 협업 팀과제",
-          deadline: "5월 26일 오후 11:59",
-          avg: 7.2,
-          aiAvg: 7.0,
-          graded: 5,
-          total: 32,
-          type: "code",
-        }
-      ];
+    try {
+      const assignments = await n8nService.listAssignments();
+      if (assignments.length > 0) {
+        return assignments;
+      }
+    } catch (err) {
+      if (err.result?.configured !== false) {
+        console.warn('n8n assignment list fetch failed:', err.message);
+      }
+    }
+
+    try {
+      const queue = await n8nService.getQueue();
+      if (queue?.assignment && queue?.students?.length > 0) {
+        const assignment = queue.assignment;
+        return [{
+          id: assignment.id || assignment.type || 'n8n',
+          course: assignment.course || '',
+          courseShort: assignment.courseShort || assignment.course || '',
+          title: assignment.title || 'n8n 과제',
+          deadline: assignment.deadline || '',
+          avg: Number(assignment.avg || 0),
+          aiAvg: Number(assignment.aiAvg || assignment.avg || 0),
+          graded: assignment.graded || 0,
+          total: queue.students?.length || 0,
+          type: assignment.type || assignment.assignment_type || 'n8n',
+        }];
+      }
+    } catch (err) {
+      if (err.result?.configured !== false) {
+        console.warn('n8n queue assignment fetch failed:', err.message);
+      }
     }
 
     try {
@@ -62,58 +69,43 @@ export const dbService = {
         .order('created_at', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        console.warn("Using fallback assignments mock data:", error?.message);
-        return [
-          {
-            id: "essay",
-            course: "인문대 교양 | 003 분반 (World Literature | 003 Section)",
-            courseShort: "세계문학의 이해",
-            title: "카프카 『변신』 감상문 — 세계문학의 이해",
-            deadline: "5월 26일 오후 11:59",
-            avg: 7.4,
-            aiAvg: 7.3,
-            graded: 12,
-            total: 45,
-            type: "essay",
-          },
-          {
-            id: "code",
-            course: "공과대 전공 | 001 분반 (Data Structures | 001 Section)",
-            courseShort: "자료구조 입문",
-            title: "스택 클래스 구현 — Github 기반 협업 팀과제",
-            deadline: "5월 26일 오후 11:59",
-            avg: 7.2,
-            aiAvg: 7.0,
-            graded: 5,
-            total: 32,
-            type: "code",
-          }
-        ];
+        if (error) console.warn('Assignment fetch failed:', error.message);
+        return [];
       }
 
       return data.map(item => ({
         id: item.id,
-        course: item.course,
-        courseShort: item.course_short,
-        title: item.title,
-        deadline: item.deadline,
+        course: item.course || '',
+        courseShort: item.course_short || item.course || '',
+        title: item.title || '',
+        deadline: item.deadline || '',
         avg: Number(item.avg || 0),
         aiAvg: Number(item.ai_avg || 0),
-        graded: item.graded,
-        total: item.total,
-        type: item.type
+        graded: Number(item.graded || 0),
+        total: Number(item.total || 0),
+        type: item.type || item.assignment_type || 'essay',
+        description: item.description || '',
+        rubric: item.rubric || '',
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
       }));
     } catch (err) {
-      console.error("Failed to fetch assignments:", err);
+      console.error('Failed to fetch assignments:', err);
       return [];
     }
   },
 
   // 2. Fetch Students / Submissions for a specific Assignment
-  async getSubmissions(assignmentId) {
-    if (!supabase) {
-      console.warn(`Supabase client is null. Using fallback submissions mock data for ${assignmentId}.`);
-      return assignmentId === 'essay' ? MOCK.TA_STUDENTS_ESSAY : MOCK.CODE_STUDENTS;
+  async getSubmissions(assignmentId, assignmentType) {
+    try {
+      const queue = await n8nService.getQueue(assignmentType || assignmentId);
+      if (queue?.students?.length > 0) {
+        return queue.students;
+      }
+    } catch (err) {
+      if (err.result?.configured !== false) {
+        console.warn(`n8n queue fetch failed for assignment ${assignmentId}:`, err.message);
+      }
     }
 
     try {
@@ -124,8 +116,8 @@ export const dbService = {
         .order('id', { ascending: true });
 
       if (error || !data || data.length === 0) {
-        console.warn(`Using fallback submissions mock data for assignment ${assignmentId}:`, error?.message);
-        return assignmentId === 'essay' ? MOCK.TA_STUDENTS_ESSAY : MOCK.CODE_STUDENTS;
+        if (error) console.warn(`Submission fetch failed for assignment ${assignmentId}:`, error.message);
+        return [];
       }
 
       return data.map(mapSubmission);
@@ -137,11 +129,6 @@ export const dbService = {
 
   // 3. Fetch detailed contents of a specific submission
   async getSubmissionContent(submissionId, assignmentType) {
-    if (!supabase) {
-      console.warn(`Supabase client is null. Using fallback detailed submission content for submission ${submissionId}.`);
-      return assignmentType === 'essay' ? MOCK.ESSAY_DOC : MOCK.CODE_SUBMISSION;
-    }
-
     try {
       const { data, error } = await supabase
         .from('submission_contents')
@@ -150,8 +137,8 @@ export const dbService = {
         .single();
 
       if (error || !data) {
-        console.warn(`Using fallback detailed submission content for submission ${submissionId}:`, error?.message);
-        return assignmentType === 'essay' ? MOCK.ESSAY_DOC : MOCK.CODE_SUBMISSION;
+        if (error) console.warn(`Submission content fetch failed for submission ${submissionId}:`, error.message);
+        return null;
       }
 
       if (assignmentType === 'essay') {
@@ -178,12 +165,11 @@ export const dbService = {
 
   // 4. Update submission scores and status
   async updateGrade(submissionId, score, status = 'graded') {
-    if (!supabase) {
-      console.warn("Supabase client is null. Grade updated locally only.");
-      return { success: false, error: 'Supabase client not initialized' };
-    }
-
     try {
+      if (!supabase.isConfigured) {
+        return { success: false, skipped: true, error: 'Supabase credentials not configured' };
+      }
+
       const { data, error } = await supabase
         .from('submissions')
         .update({
@@ -205,14 +191,10 @@ export const dbService = {
   },
 
   // 5. Fetch student dashboard assignments
-  async getStudentAssignments(studentNo = '20234113') {
-    if (!supabase) {
-      console.warn("Supabase client is null. Using fallback student assignments mock data.");
-      return MOCK.STUDENT_ASSIGNMENTS;
-    }
-
+  async getStudentAssignments(studentNo) {
     try {
-      // Find student first
+      if (!studentNo) return [];
+
       const { data: student } = await supabase
         .from('students')
         .select('id')
@@ -220,7 +202,7 @@ export const dbService = {
         .single();
 
       if (!student) {
-        return MOCK.STUDENT_ASSIGNMENTS;
+        return [];
       }
 
       const { data: submissions, error } = await supabase
@@ -229,7 +211,7 @@ export const dbService = {
         .eq('student_id', student.id);
 
       if (error || !submissions || submissions.length === 0) {
-        return MOCK.STUDENT_ASSIGNMENTS;
+        return [];
       }
 
       return submissions.map(sub => {
@@ -243,17 +225,17 @@ export const dbService = {
           status: sub.status,
           score: sub.final_score,
           total: 10,
-          avg: assn.avg || 7.0,
-          rank: sub.final_score >= 8.5 ? "상위 15%" : sub.final_score >= 7.0 ? "상위 38%" : "상위 50%",
+          avg: assn.avg || null,
+          rank: sub.rank || '',
           gradedAt: sub.graded_at || '',
           submittedAt: sub.submitted_at || '',
           deadline: assn.deadline || '',
-          grader: "지정 조교"
+          grader: sub.grader || ''
         };
       });
     } catch (err) {
       console.error("Failed to fetch student assignments:", err);
-      return MOCK.STUDENT_ASSIGNMENTS;
+      return [];
     }
   }
 };

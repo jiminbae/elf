@@ -1,9 +1,8 @@
 import React from 'react';
 import { Icon } from '../icons';
 import { Shell } from '../shell';
-import { MOCK } from '../data';
 
-export function QueueView({ assignment, students, onOpen, onSwitchAssignment, openSet, setOpenSet }) {
+export function QueueView({ assignment, students, onOpen, onSwitchAssignment, onBack, openSet, setOpenSet }) {
   const [filter, setFilter] = React.useState("all"); // all, ready, graded, suspicion
   const [search, setSearch] = React.useState("");
 
@@ -24,6 +23,13 @@ export function QueueView({ assignment, students, onOpen, onSwitchAssignment, op
   return (
     <>
       <Shell.Crumbs trail={[assignment.course, "과제", assignment.title]} />
+      <button
+        className="btn btn--quiet btn--sm"
+        onClick={onBack}
+        style={{ marginTop: 8, marginBottom: 8, alignSelf: "flex-start", gap: 6, display: 'inline-flex', alignItems: 'center' }}
+      >
+        <Icon.chevL width="14" height="14" /> 과제 목록으로
+      </button>
 
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginTop: 4 }}>
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700, letterSpacing: "-0.015em" }}>{assignment.title}</h1>
@@ -43,7 +49,7 @@ export function QueueView({ assignment, students, onOpen, onSwitchAssignment, op
       {/* Stat cards */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginTop: 20 }}>
         <StatCard label="채점 완료" value={`${assignment.graded}/${students.length}`} tone="good"
-          progress={assignment.graded / students.length} />
+          progress={students.length ? assignment.graded / students.length : 0} />
         <StatCard label="대기" value={`${students.filter(s => s.status === "ready").length}`} tone="ai" />
         <StatCard label="검토 권장" value={`${students.filter(s => s.hasWarning || s.hasSimWarning).length}`} tone="warn" sub="AI 의심도 또는 유사도 ↑" />
         <StatCard label="평균 점수" value={`${assignment.avg}`} sub={`AI 추천 평균 ${assignment.aiAvg}`} />
@@ -86,11 +92,11 @@ export function QueueView({ assignment, students, onOpen, onSwitchAssignment, op
         {filtered.map(s => (
           <div
             key={s.id}
-            className={"q-row" + (openSet.has(s.id) ? " is-selected" : "") + (s.isFocus ? " is-selected" : "")}
+            className={"q-row" + (openSet.has(s.id) || Boolean(s.isFocus) ? " is-selected" : "")}
             onClick={() => toggle(s.id)}
           >
             <input
-              type="checkbox" checked={openSet.has(s.id) || s.isFocus}
+              type="checkbox" checked={openSet.has(s.id) || Boolean(s.isFocus)}
               onChange={() => toggle(s.id)}
               onClick={e => e.stopPropagation()}
               style={{ accentColor: "var(--brand-700)" }}

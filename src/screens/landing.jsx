@@ -1,7 +1,10 @@
 import React from 'react';
 import { Icon } from '../icons';
 
-export function Landing({ onPick }) {
+export function Landing({ onPick, metrics }) {
+  const taStats = metrics?.taStats || [];
+  const studentStats = metrics?.studentStats || [];
+
   return (
     <div className="app full-bleed" style={{ background: "var(--paper)", display: "grid", placeItems: "center", padding: 32 }}>
       <div style={{ width: "100%", maxWidth: 920 }}>
@@ -14,7 +17,7 @@ export function Landing({ onPick }) {
             boxShadow: "var(--sh-2)"
           }}>KNU</div>
           <div>
-            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>경북국립대학교 학습포털</div>
+            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>경북대학교 학습포털</div>
             <div style={{ fontSize: 13, color: "var(--ink-500)" }}>AI 채점 보조가 적용된 2026년 1학기 평가 시스템</div>
           </div>
           <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--ink-500)" }}>
@@ -24,20 +27,15 @@ export function Landing({ onPick }) {
         </div>
 
         <div style={{ fontSize: 12, color: "var(--ink-500)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 600, marginBottom: 12 }}>
-          데모 프로토타입 — 시작할 역할을 선택하세요
+          시작할 역할을 선택하세요
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <RoleCard
             role="ta"
             title="조교 / 채점 패널"
-            person="남규리 조교"
-            sub="자료구조 입문 · 세계문학의 이해"
-            stats={[
-              { lbl: "채점 대기", val: "23" },
-              { lbl: "오늘 마감", val: "2" },
-              { lbl: "AI 검토 권장", val: "3" },
-            ]}
+            person="조교"
+            stats={taStats}
             features={[
               "AI가 추천하는 점수·피드백 초안 검토",
               "본문 인라인 코멘트, 라인별 코드 코멘트",
@@ -49,13 +47,8 @@ export function Landing({ onPick }) {
           <RoleCard
             role="student"
             title="학생 / 피드백 화면"
-            person="박효율 학생"
-            sub="2023학번 · 컴퓨터학부"
-            stats={[
-              { lbl: "이번주 과제", val: "2" },
-              { lbl: "채점 완료", val: "1" },
-              { lbl: "학습 분석", val: "신규" },
-            ]}
+            person="학생"
+            stats={studentStats}
             features={[
               "항목별 점수와 AI 학습 분석 펼쳐보기",
               "맞춤 학습 자료 미리보기",
@@ -67,15 +60,14 @@ export function Landing({ onPick }) {
         </div>
 
         <div style={{ marginTop: 28, fontSize: 11.5, color: "var(--ink-400)", textAlign: "center", lineHeight: 1.7 }}>
-          좌측 사이드바 하단의 아바타를 클릭하면 언제든지 다른 역할로 전환할 수 있습니다.<br />
-          이 프로토타입은 데모 데이터로 동작합니다 — 실제 성적·개인정보는 포함되어 있지 않습니다.
+          좌측 사이드바 하단의 아바타를 클릭하면 언제든지 역할 선택 화면으로 돌아올 수 있습니다.
         </div>
       </div>
     </div>
   );
 }
 
-function RoleCard({ role, title, person, sub, stats, features, cta, onPick }) {
+function RoleCard({ role, title, person, stats, features, cta, onPick }) {
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{
@@ -99,7 +91,6 @@ function RoleCard({ role, title, person, sub, stats, features, cta, onPick }) {
           }}>{role === "ta" ? "남" : "효"}</div>
           <div>
             <div style={{ fontSize: 13.5, fontWeight: 600 }}>{person}</div>
-            <div style={{ fontSize: 11.5, color: "var(--ink-600)" }}>{sub}</div>
           </div>
         </div>
       </div>

@@ -1,22 +1,19 @@
 import React from 'react';
 import { Icon } from '../icons';
-import { MOCK } from '../data';
 
-export function GradingCode({ aiLayout = "right", onApprove, submissionContent, focusedStudent }) {
+export function GradingCode({ aiLayout = "right", onApprove, onRegenerate, submissionContent, focusedStudent }) {
   const [tab, setTab] = React.useState("submission");
   const [tone, setTone] = React.useState("중립");
   const [editing, setEditing] = React.useState(false);
   const [openLineComment, setOpenLineComment] = React.useState(7);
   const [runOpen, setRunOpen] = React.useState(true);
-  const [scores, setScores] = React.useState({ a: 4, b: 1, c: 2, d: 0.5 });
-  const [final, setFinal] = React.useState(7.5);
-  const [draft, setDraft] = React.useState(
-    "스택의 기본 구조는 정확하게 구현했어요. push, peek 메서드도 잘 동작합니다. 다만 pop 메서드에서 빈 스택일 때의 예외 처리가 빠져있어 IndexError가 발생할 수 있고, 시간복잡도 측면에서도 개선 여지가 있어요. 다음 과제에서는 예외 케이스도 함께 고려해보세요."
-  );
+  const [scores, setScores] = React.useState({ a: 0, b: 0, c: 0, d: 0 });
+  const [final, setFinal] = React.useState(0);
+  const [draft, setDraft] = React.useState("");
 
   React.useEffect(() => {
     if (focusedStudent) {
-      setFinal(focusedStudent.finalScore !== null ? focusedStudent.finalScore : (focusedStudent.aiScore || 7.5));
+      setFinal(focusedStudent.finalScore ?? focusedStudent.aiScore ?? 0);
     }
   }, [focusedStudent]);
 
@@ -30,7 +27,8 @@ export function GradingCode({ aiLayout = "right", onApprove, submissionContent, 
       tone={tone} setTone={setTone}
       draft={draft} setDraft={setDraft}
       final={final} setFinal={setFinal}
-      onApprove={() => onApprove && onApprove(final)}
+      onApprove={onApprove}
+      onRegenerate={onRegenerate}
     />
   );
 
@@ -73,19 +71,19 @@ function CodeTabs({ tab, setTab }) {
 }
 
 function CodeFileMeta({ codeSubmission, focusedStudent }) {
-  const sub = codeSubmission || MOCK.CODE_SUBMISSION;
+  const sub = codeSubmission || {};
   const student = focusedStudent || {};
   return (
     <div className="card" style={{ borderRadius: "var(--r-lg) var(--r-lg) 0 0", borderBottom: 0 }}>
       <div className="sub-meta" style={{ borderRadius: "var(--r-lg) var(--r-lg) 0 0" }}>
         <div className="file-ico"><Icon.code width="16" height="16" /></div>
-        <div className="title" style={{ fontFamily: "var(--font-mono)" }}>{sub.filename || 'stack.py'}</div>
+        <div className="title" style={{ fontFamily: "var(--font-mono)" }}>{sub.filename || '제출 파일 없음'}</div>
         <span className="dot-sep" />
-        <span>{sub.lines || 14} lines</span>
+        <span>{sub.lines || 0} lines</span>
         <span className="dot-sep" />
-        <span>{sub.bytes || 287} bytes</span>
+        <span>{sub.bytes || 0} bytes</span>
         <span className="spacer" />
-        <span style={{ fontSize: 12, color: "var(--ink-500)" }}>제출: {student.submittedAt || sub.submittedAt || '5월 22일 오후 3:42'}</span>
+        <span style={{ fontSize: 12, color: "var(--ink-500)" }}>제출: {student.submittedAt || sub.submittedAt || '-'}</span>
         <button className="btn btn--quiet btn--sm btn--icon"><Icon.download width="16" height="16" /></button>
       </div>
     </div>
@@ -93,11 +91,15 @@ function CodeFileMeta({ codeSubmission, focusedStudent }) {
 }
 
 function CodeBody({ openLineComment, setOpenLineComment, codeSubmission }) {
-  const sub = codeSubmission || MOCK.CODE_SUBMISSION;
+  const sub = codeSubmission || {};
   const colorFor = (c) => c ? "code-tok-" + c : "";
 
   const tokens = sub.tokens || [];
 
+
+  if (tokens.length === 0) {
+    return <div className="card card-pad">불러온 코드 제출 내용이 없습니다.</div>;
+  }
 
   return (
     <div className="code-card" style={{ borderRadius: 0 }}>
@@ -163,13 +165,13 @@ function LineComment({ line, onClose }) {
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
-            <strong style={{ color: "var(--warn-700)", whiteSpace: "nowrap" }}>AI · 빈 스택 검증 누락</strong>
+            <strong style={{ color: "var(--warn-700)", whiteSpace: "nowrap" }}>AI · 코드 검토 항목</strong>
             <span style={{ fontSize: 11.5, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{line}번 줄 · 신뢰도 92%</span>
             <button className="btn btn--quiet btn--sm" style={{ marginLeft: "auto" }} onClick={onClose}>닫기</button>
           </div>
           <p style={{ margin: "6px 0", color: "var(--ink-800)" }}>
             <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>self.items.pop()</code>
-            은 리스트가 비어있을 때 <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>IndexError</code> 를 발생시킵니다. 자료구조의 일반적인 관례에 따라 <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>IsEmpty</code> 체크 후 <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>raise</code> 처리를 권장합니다.
+            은 특정 조건에서 <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>IndexError</code> 를 발생시킵니다. 채점 기준에 따라 <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>IsEmpty</code> 체크 후 <code style={{ fontFamily: "var(--font-mono)", background: "var(--white)", padding: "1px 6px", borderRadius: 4, border: "1px solid var(--ink-200)" }}>raise</code> 처리를 권장합니다.
           </p>
           <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
             <button className="btn btn--ghost btn--sm"><Icon.copy width="12" height="12" /> 학생에게 코멘트로 추가</button>
@@ -243,23 +245,53 @@ function CodeSimilarity() {
       <p style={{ color: "var(--ink-600)", fontSize: 13, marginTop: 6 }}>
         같은 분반(15명) 내에서 정규화된 토큰 시퀀스 유사도가 30% 이상인 학생을 표시합니다.
       </p>
-      <div className="empty">유사도 30% 이상 사례 없음 · 표준적인 스택 구현 패턴을 따른 결과로 보입니다.</div>
+      <div className="empty">표시할 코드 유사도 분석 결과가 없습니다.</div>
     </div>
   );
 }
 
 function CodeAIPanel({
   editing, setEditing, scores, setScores, tone, setTone,
-  draft, setDraft, final, setFinal, onApprove
+  draft, setDraft, final, setFinal, onApprove, onRegenerate
 }) {
+  const [regenerating, setRegenerating] = React.useState(false);
   const ai = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
   const same = ai === final;
+  const rubricItems = [
+    { k: "a", name: "기능 구현", max: 5 },
+    { k: "b", name: "예외 처리", max: 2, warn: true },
+    { k: "c", name: "코드 스타일", max: 2 },
+    { k: "d", name: "시간복잡도", max: 1, warn: true },
+  ];
+  const handleRegenerate = async () => {
+    if (!onRegenerate || regenerating) return;
+
+    setRegenerating(true);
+    try {
+      const nextDraft = await onRegenerate(tone);
+      if (nextDraft) setDraft(nextDraft);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const buildApproval = () => ({
+    finalScore: final,
+    aiScore: ai,
+    taFeedback: draft,
+    tone,
+    scoreScale: 10,
+    categoryScores: rubricItems.map(item => ({
+      name: item.name,
+      score: scores[item.k],
+      max_score: item.max,
+    })),
+  });
   return (
     <div className="aipanel">
       <div className="aipanel__hd">
         <Icon.spark width="14" height="14" style={{ color: "var(--ai-700)" }} />
         <h3>AI 채점 보조</h3>
-        <span className="model">Claude Sonnet 4.6</span>
       </div>
 
       <div className="aiscore">
@@ -270,12 +302,7 @@ function CodeAIPanel({
       </div>
 
       <div className="rubric">
-        {[
-          { k: "a", name: "기능 구현", max: 5 },
-          { k: "b", name: "예외 처리", max: 2, warn: true },
-          { k: "c", name: "코드 스타일", max: 2 },
-          { k: "d", name: "시간복잡도", max: 1, warn: true },
-        ].map(r => (
+        {rubricItems.map(r => (
           <div key={r.k} className={"rubric__row" + (editing ? " editing" : "")}>
             <span className="name">{r.name}</span>
             {editing ? (
@@ -303,8 +330,7 @@ function CodeAIPanel({
       <div className="aibox warn">
         <h4><Icon.alert width="13" height="13" /> 약점</h4>
         <ul>
-          <li>7번 줄: 빈 스택 pop() 시 IndexError 발생</li>
-          <li>시간복잡도 O(n²), append/pop 활용 권장</li>
+          <li>등록된 개선 항목이 없습니다</li>
         </ul>
       </div>
 
@@ -329,7 +355,9 @@ function CodeAIPanel({
         <div className="draft__hd">
           <Icon.msg width="13" height="13" style={{ color: "var(--ink-600)" }} />
           <h4>AI 피드백 초안 <span style={{ fontWeight: 400, color: "var(--ink-500)" }}>(수정 가능)</span></h4>
-          <button className="regen"><Icon.refresh width="12" height="12" /> 재생성</button>
+          <button className="regen" onClick={handleRegenerate} disabled={regenerating}>
+            <Icon.refresh width="12" height="12" /> {regenerating ? "재생성 중" : "재생성"}
+          </button>
         </div>
         <textarea value={draft} onChange={e => setDraft(e.target.value)} />
       </div>
@@ -350,7 +378,7 @@ function CodeAIPanel({
       </div>
 
       <div className="actions-row">
-        <button className="btn btn--primary" onClick={onApprove}>
+        <button className="btn btn--primary" onClick={() => onApprove && onApprove(buildApproval())}>
           승인 & 다음 학생 <Icon.arrowR width="14" height="14" />
         </button>
         <button className="btn btn--ghost" onClick={() => setEditing(v => !v)}>

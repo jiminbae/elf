@@ -11,7 +11,7 @@ export function GlobalRail({ active = "courses", role = "ta", onSwitch }) {
     { key: "courses",  icon: Icon.book,    label: "과목" },
     { key: "groups",   icon: Icon.users,   label: "그룹" },
     { key: "cal",      icon: Icon.cal,     label: "캘린더" },
-    { key: "inbox",    icon: Icon.inbox,   label: "메시지함", badge: 12 },
+    { key: "inbox",    icon: Icon.inbox,   label: "메시지함" },
     { key: "feed",     icon: Icon.list,    label: "전체게시물" },
   ];
   return (
@@ -30,7 +30,7 @@ export function GlobalRail({ active = "courses", role = "ta", onSwitch }) {
       <div className="rail__spacer" />
       <button
         className="rail__avatar"
-        title={role === "ta" ? "남규리 조교 — 클릭하여 학생으로 전환" : "박효율 학생 — 클릭하여 조교로 전환"}
+        title="역할 선택 화면으로 이동"
         onClick={onSwitch}
       >
         {role === "ta" ? "남" : "효"}
@@ -52,7 +52,7 @@ export function CourseRail({ active = "assign", role = "ta", onSelect }) {
     { key: "groups",  label: "그룹" },
     { key: "board",   label: "게시판" },
     { key: "survey",  label: "설문" },
-    { key: "assign",  label: "과제 및 평가", badge: 23 },
+    { key: "assign",  label: "과제 및 평가" },
     { key: "grades",  label: "성적 관리" },
   ];
   const stuItems = [
@@ -66,7 +66,7 @@ export function CourseRail({ active = "assign", role = "ta", onSelect }) {
     { key: "board",   label: "게시판" },
     { key: "survey",  label: "설문" },
     { key: "assign",  label: "과제 및 평가" },
-    { key: "grade",   label: "성적",     badge: 1 },
+    { key: "grade",   label: "성적" },
   ];
   const items = role === "ta" ? taItems : stuItems;
   return (

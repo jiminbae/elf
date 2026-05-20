@@ -34,3 +34,21 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## n8n Webhook 연결
+
+이 앱은 n8n 워크플로우 export의 webhook path를 기준으로 서버 프록시를 통해 호출합니다. `.env.local`에 아래 값을 넣으면 브라우저에 webhook URL을 노출하지 않고 연결됩니다.
+
+```bash
+N8N_WEBHOOK_BASE_URL=https://YOUR_N8N_HOST/webhook
+# 테스트 webhook을 쓸 때는 예: https://YOUR_N8N_HOST/webhook-test
+
+# n8n webhook에 Header Auth를 켰을 때만 사용
+N8N_WEBHOOK_AUTH_HEADER=x-n8n-secret
+N8N_WEBHOOK_AUTH_VALUE=your-secret
+
+# 또는 Bearer 토큰 방식일 때만 사용
+# N8N_WEBHOOK_AUTH_TOKEN=your-token
+```
+
+현재 연결된 workflow path는 `assignment/submit`, `grade/approve`, `student/result`, `feedback/regenerate`, `ta/queue`입니다.
