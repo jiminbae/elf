@@ -36,6 +36,29 @@ function fileToBase64(file) {
   });
 }
 
+async function fileToText(file) {
+  if (!file) return '';
+
+  try {
+    return await file.text();
+  } catch {
+    return '';
+  }
+}
+
+function buildRubricWithReference(rubric, referenceFileName, referenceText) {
+  const baseRubric = String(rubric || '').trim();
+  const cleanReference = String(referenceText || '').trim();
+
+  if (!cleanReference) return baseRubric;
+
+  return [
+    baseRubric,
+    `[기준 파일 내용 (${referenceFileName || 'reference file'})]`,
+    cleanReference,
+  ].filter(Boolean).join('\n\n');
+}
+
 function isToday(value) {
   if (!value) return false;
   const date = new Date(value);
@@ -313,13 +336,25 @@ export default function Home() {
 
   const handleCreateAssignment = async (draft) => {
     try {
+      const referenceFile = draft.referenceFile || null;
+      const [referenceFileBase64, referenceFileContent] = referenceFile
+        ? await Promise.all([fileToBase64(referenceFile), fileToText(referenceFile)])
+        : ['', ''];
+      const referenceFileName = referenceFile?.name || '';
+      const rubric = buildRubricWithReference(draft.rubric, referenceFileName, referenceFileContent);
+
       const created = await dbService.createAssignment({
         title: draft.title,
         type: draft.type || 'essay',
         assignment_type: draft.type || 'essay',
-        rubric: draft.rubric || '',
+        rubric,
         description: draft.description || '',
         deadline: draft.deadlineLabel || draft.deadline || '',
+        reference_file_name: referenceFileName,
+        reference_file_mime: referenceFile?.type || '',
+        reference_file_size: referenceFile?.size || 0,
+        reference_file_base64: referenceFileBase64,
+        reference_file_content: referenceFileContent,
       });
 
       if (!created.deadline) {

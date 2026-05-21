@@ -122,6 +122,10 @@ function normalizeAssignment(assignment = {}) {
     type: assignment.type || assignment.assignment_type || 'essay',
     description: assignment.description || '',
     rubric: assignment.rubric || '',
+    referenceFileName: assignment.referenceFileName || assignment.reference_file_name || '',
+    referenceFileMime: assignment.referenceFileMime || assignment.reference_file_mime || '',
+    referenceFileSize: assignment.referenceFileSize || assignment.reference_file_size || 0,
+    referenceFileContent: assignment.referenceFileContent || assignment.reference_file_content || '',
     createdAt: assignment.createdAt || assignment.created_at,
     updatedAt: assignment.updatedAt || assignment.updated_at,
   };
