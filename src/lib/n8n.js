@@ -46,6 +46,33 @@ function normalizeScore(value) {
   return numberValue > 10 ? +(numberValue / 10).toFixed(1) : numberValue;
 }
 
+function parseMaybeJson(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+}
+
+function unwrapFirst(value) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function normalizeStudentResult(data) {
+  const item = unwrapFirst(data) || {};
+  const record = item.json || item;
+  const result = unwrapFirst(record.result || record.data || record.feedback || record) || {};
+
+  return {
+    ...record,
+    result,
+  };
+}
+
 function normalizeQueueStudent(student) {
   return {
     id: student.submission_id || student.id,
@@ -68,6 +95,16 @@ function normalizeQueueStudent(student) {
     fileMime: student.fileMime || student.file_mime,
     fileSize: student.fileSize || student.file_size,
     content: student.content,
+    summary: student.summary || student.feedback_summary || '',
+    taFeedback: student.taFeedback || student.ta_feedback || student.summary || '',
+    grade: student.grade || '',
+    categoryScores: parseMaybeJson(student.categoryScores ?? student.category_scores),
+    strengths: parseMaybeJson(student.strengths),
+    weaknesses: parseMaybeJson(student.weaknesses),
+    mistakes: parseMaybeJson(student.mistakes),
+    testResults: parseMaybeJson(student.testResults ?? student.test_results),
+    learningRecommendations: parseMaybeJson(student.learningRecommendations ?? student.learning_recommendations),
+    nextSteps: parseMaybeJson(student.nextSteps ?? student.next_steps),
   };
 }
 
@@ -133,7 +170,8 @@ export const n8nService = {
   },
 
   async getStudentResult(submissionId) {
-    return callWebhook(WEBHOOKS.studentResult, { submission_id: submissionId });
+    const data = await callWebhook(WEBHOOKS.studentResult, { submission_id: submissionId });
+    return normalizeStudentResult(data);
   },
 
   async getSubmissionContent(submissionId) {

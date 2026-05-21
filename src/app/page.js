@@ -122,6 +122,7 @@ export default function Home() {
   const [assignmentsList, setAssignmentsList] = React.useState([]);
   const [submissionsList, setSubmissionsList] = React.useState([]);
   const [detailedContent, setDetailedContent] = React.useState(null);
+  const [focusedFeedback, setFocusedFeedback] = React.useState(null);
   const [studentsList, setStudentsList] = React.useState([]);
   const [selectedStudentId, setSelectedStudentId] = React.useState('');
   const [studentAssignments, setStudentAssignments] = React.useState([]);
@@ -181,6 +182,7 @@ export default function Home() {
       setSubmissionsList([]);
       setFocusedId(null);
       setDetailedContent(null);
+      setFocusedFeedback(null);
       setDbLoading(false);
       return;
     }
@@ -191,6 +193,7 @@ export default function Home() {
       const data = await dbService.getSubmissions(activeAssn, currentAssn?.type);
       setSubmissionsList(data);
       setDetailedContent(null);
+      setFocusedFeedback(null);
       
       const defaultFocus = data.find(s => s.isFocus) || data.find(s => s.status === 'ready') || data[0];
       setFocusedId(defaultFocus ? defaultFocus.id : null);
@@ -204,16 +207,27 @@ export default function Home() {
     if (!mounted) return;
     if (!focusedId) {
       setDetailedContent(null);
+      setFocusedFeedback(null);
       return;
     }
 
     async function loadContent() {
       const currentAssn = assignmentsList.find(a => a.id === activeAssn) || { type: activeAssn };
       const focusedSubmission = submissionsList.find(s => s.id === focusedId || s.submission_id === focusedId);
-      const data = await dbService.getSubmissionContent(focusedId, currentAssn.type, {
-        studentId: focusedSubmission?.no,
-        assignmentTitle: focusedSubmission?.assignmentTitle || currentAssn.title,
-      });
+      const [data, feedbackResult] = await Promise.all([
+        dbService.getSubmissionContent(focusedId, currentAssn.type, {
+          studentId: focusedSubmission?.no,
+          assignmentTitle: focusedSubmission?.assignmentTitle || currentAssn.title,
+        }),
+        n8nService.getStudentResult(focusedId).catch(err => {
+          if (err.result?.configured !== false) {
+            console.warn('n8n student result fetch failed:', err.message);
+          }
+          return null;
+        }),
+      ]);
+
+      setFocusedFeedback(feedbackResult?.result || null);
 
       if (!data && focusedSubmission?.content) {
         const content = focusedSubmission.content;
@@ -355,7 +369,24 @@ export default function Home() {
     const students = submissionsList;
     const totalCount = students.length;
     const focusedIdx = students.findIndex(s => s.id === focusedId);
-    const focused = students[Math.max(0, focusedIdx)] || students[0];
+    const focusedBase = students[Math.max(0, focusedIdx)] || students[0];
+    const focused = focusedBase ? {
+      ...focusedBase,
+      ...(focusedFeedback ? {
+        aiScore: focusedFeedback.ai_score ?? focusedFeedback.aiScore ?? focusedFeedback.score ?? focusedBase.aiScore,
+        finalScore: focusedFeedback.final_score ?? focusedFeedback.finalScore ?? focusedBase.finalScore,
+        grade: focusedFeedback.grade || focusedBase.grade,
+        summary: focusedFeedback.summary || focusedFeedback.feedback_summary || focusedBase.summary,
+        taFeedback: focusedFeedback.ta_feedback || focusedFeedback.taFeedback || focusedFeedback.feedback || focusedFeedback.summary || focusedBase.taFeedback,
+        categoryScores: focusedFeedback.category_scores || focusedFeedback.categoryScores || focusedBase.categoryScores,
+        strengths: focusedFeedback.strengths || focusedBase.strengths,
+        weaknesses: focusedFeedback.weaknesses || focusedBase.weaknesses,
+        mistakes: focusedFeedback.mistakes || focusedBase.mistakes,
+        testResults: focusedFeedback.test_results || focusedFeedback.testResults || focusedBase.testResults,
+        learningRecommendations: focusedFeedback.learning_recommendations || focusedFeedback.learningRecommendations || focusedBase.learningRecommendations,
+        nextSteps: focusedFeedback.next_steps || focusedFeedback.nextSteps || focusedBase.nextSteps,
+      } : {}),
+    } : focusedBase;
 
     // Navigation functions for queue / grading
     const next = () => {
@@ -432,10 +463,12 @@ export default function Home() {
           focused.submission_id || focused.id,
           toneMap[tone] || "encouraging"
         );
-        const regenerated = result?.ta_feedback || result?.data?.ta_feedback;
+        const rawPayload = Array.isArray(result) ? result[0] : (result?.result || result?.data || result);
+        const payload = rawPayload?.json || rawPayload;
+        const regenerated = payload?.ta_feedback || payload?.taFeedback || payload?.feedback || payload?.summary;
         if (regenerated) {
           showToast("피드백 초안을 n8n으로 재생성했습니다.", "good");
-          return regenerated;
+          return { ...payload, ta_feedback: regenerated };
         }
       } catch (err) {
         if (err.result?.configured !== false) {

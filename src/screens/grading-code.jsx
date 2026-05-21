@@ -1,6 +1,115 @@
 import React from 'react';
 import { Icon } from '../icons';
 
+const CODE_RUBRIC_ITEMS = [
+  { k: 'a', name: '기능 구현', max: 5, aliases: ['기능', '정확', '구현'] },
+  { k: 'b', name: '예외 처리', max: 2, aliases: ['예외', '오류', '에러'] },
+  { k: 'c', name: '코드 스타일', max: 2, aliases: ['스타일', '가독', '문서', '네이밍', 'PEP'] },
+  { k: 'd', name: '시간복잡도', max: 1, aliases: ['시간', '복잡', '효율', '성능'] },
+];
+
+function parseMaybeJson(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+}
+
+function asTextList(value) {
+  if (!value) return [];
+
+  const items = parseMaybeJson(value);
+  if (Array.isArray(items)) {
+    return items.map(item => {
+      if (typeof item === 'string') return item;
+      return item?.title || item?.reason || item?.suggestion || item?.name || item?.message || '';
+    }).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value.split(/\r?\n|•|- /).map(item => item.trim()).filter(Boolean);
+  }
+
+  if (typeof items === 'object') {
+    return Object.values(items).map(item => {
+      if (typeof item === 'string') return item;
+      return item?.title || item?.reason || item?.suggestion || item?.name || item?.message || '';
+    }).filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeScore(value) {
+  if (value == null || value === '') return null;
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return null;
+  return +(numberValue > 10 ? numberValue / 10 : numberValue).toFixed(1);
+}
+
+function clampScore(value, max) {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return 0;
+  return +Math.min(Math.max(numberValue, 0), max).toFixed(1);
+}
+
+function firstScore(...values) {
+  for (const value of values) {
+    const score = normalizeScore(value);
+    if (score != null) return score;
+  }
+  return 0;
+}
+
+function scoreMapFromCategories(categoryScores, fallbackTotal) {
+  const next = Object.fromEntries(CODE_RUBRIC_ITEMS.map(item => [item.k, 0]));
+  const rawCategories = parseMaybeJson(categoryScores);
+  const categories = Array.isArray(rawCategories)
+    ? rawCategories
+    : rawCategories && typeof rawCategories === 'object'
+      ? Object.entries(rawCategories).map(([name, score]) => (
+          typeof score === 'object' ? { name, ...score } : { name, score }
+        ))
+      : [];
+  const used = new Set();
+
+  if (categories.length > 0) {
+    categories.forEach((category, index) => {
+      const name = String(category?.name || category?.title || category?.category || category?.criterion || '').toLowerCase();
+      let target = CODE_RUBRIC_ITEMS.find(item => item.aliases.some(alias => name.includes(alias.toLowerCase())));
+      if (!target) target = CODE_RUBRIC_ITEMS[index];
+      if (!target || used.has(target.k)) return;
+
+      const rawScore = Number(category?.score ?? category?.value ?? category?.points ?? 0);
+      const rawMax = Number(category?.max_score ?? category?.max ?? category?.maxScore ?? target.max);
+      const scaled = rawMax && rawMax !== target.max ? (rawScore / rawMax) * target.max : rawScore;
+      next[target.k] = clampScore(scaled, target.max);
+      used.add(target.k);
+    });
+
+    return next;
+  }
+
+  const total = firstScore(fallbackTotal);
+  CODE_RUBRIC_ITEMS.forEach(item => {
+    next[item.k] = clampScore((total / 10) * item.max, item.max);
+  });
+  return next;
+}
+
+function sumScores(scores) {
+  return +CODE_RUBRIC_ITEMS.reduce((sum, item) => sum + Number(scores[item.k] || 0), 0).toFixed(1);
+}
+
+function feedbackDraftFrom(student) {
+  return student?.taFeedback || student?.ta_feedback || student?.summary || student?.feedback || '';
+}
+
 function codeToDisplaySubmission(submissionContent, focusedStudent) {
   if (submissionContent) return submissionContent;
 
@@ -30,13 +139,20 @@ export function GradingCode({ aiLayout = "right", onApprove, onRegenerate, submi
   const [draft, setDraft] = React.useState("");
 
   React.useEffect(() => {
-    if (focusedStudent) {
-      setFinal(focusedStudent.finalScore ?? focusedStudent.aiScore ?? 0);
-    }
-  }, [focusedStudent]);
+    if (!focusedStudent) return;
 
-  const total = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
-  React.useEffect(() => { setFinal(total); }, [total]);
+    const nextScores = scoreMapFromCategories(
+      focusedStudent.categoryScores || focusedStudent.category_scores,
+      focusedStudent.aiScore ?? focusedStudent.ai_score ?? focusedStudent.finalScore ?? focusedStudent.final_score
+    );
+    const recommended = sumScores(nextScores);
+
+    setScores(nextScores);
+    const persistedFinal = firstScore(focusedStudent.finalScore, focusedStudent.final_score);
+    const shouldUsePersistedFinal = focusedStudent.status === 'graded' || persistedFinal > 0;
+    setFinal(shouldUsePersistedFinal ? persistedFinal : recommended);
+    setDraft(feedbackDraftFrom(focusedStudent));
+  }, [focusedStudent, setScores, setFinal, setDraft]);
 
   const aiPanel = (
     <CodeAIPanel
@@ -47,6 +163,7 @@ export function GradingCode({ aiLayout = "right", onApprove, onRegenerate, submi
       final={final} setFinal={setFinal}
       onApprove={onApprove}
       onRegenerate={onRegenerate}
+      focusedStudent={focusedStudent}
     />
   );
 
@@ -270,24 +387,20 @@ function CodeSimilarity() {
 
 function CodeAIPanel({
   editing, setEditing, scores, setScores, tone, setTone,
-  draft, setDraft, final, setFinal, onApprove, onRegenerate
+  draft, setDraft, final, setFinal, onApprove, onRegenerate, focusedStudent
 }) {
   const [regenerating, setRegenerating] = React.useState(false);
-  const ai = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
-  const same = ai === final;
-  const rubricItems = [
-    { k: "a", name: "기능 구현", max: 5 },
-    { k: "b", name: "예외 처리", max: 2, warn: true },
-    { k: "c", name: "코드 스타일", max: 2 },
-    { k: "d", name: "시간복잡도", max: 1, warn: true },
-  ];
-  const [strengths, setStrengths] = React.useState([
-    "클래스 구조와 메서드 시그니처를 정확히 잡았습니다",
-    "push, peek 동작이 의도대로 구현되었습니다"
-  ]);
-  const [weaknesses, setWeaknesses] = React.useState([
-    "등록된 개선 항목이 없습니다"
-  ]);
+  const ai = sumScores(scores);
+  const same = Math.abs(ai - Number(final || 0)) < 0.05;
+  const rubricItems = CODE_RUBRIC_ITEMS;
+  const [strengths, setStrengths] = React.useState([]);
+  const [weaknesses, setWeaknesses] = React.useState([]);
+
+  React.useEffect(() => {
+    setStrengths(asTextList(focusedStudent?.strengths));
+    const nextWeaknesses = asTextList(focusedStudent?.weaknesses);
+    setWeaknesses(nextWeaknesses.length > 0 ? nextWeaknesses : ['등록된 개선 항목이 없습니다']);
+  }, [focusedStudent]);
 
   const handleRegenerate = async () => {
     if (!onRegenerate || regenerating) return;
@@ -298,12 +411,17 @@ function CodeAIPanel({
       if (response) {
         try {
           const data = typeof response === 'string' ? JSON.parse(response) : response;
-          if (data.feedback) setDraft(data.feedback);
-          if (data.score !== undefined) setFinal(data.score);
-          if (data.strengths && Array.isArray(data.strengths)) setStrengths(data.strengths);
-          if (data.weaknesses && Array.isArray(data.weaknesses)) setWeaknesses(data.weaknesses);
-          if (data.categoryScores) {
-            setScores(prev => ({ ...prev, ...data.categoryScores }));
+          const nextDraft = data.ta_feedback || data.feedback || data.summary;
+          if (nextDraft) setDraft(nextDraft);
+          if (data.score !== undefined || data.final_score !== undefined || data.ai_score !== undefined) {
+            setFinal(firstScore(data.final_score, data.score, data.ai_score));
+          }
+          if (data.strengths) setStrengths(asTextList(data.strengths));
+          if (data.weaknesses) setWeaknesses(asTextList(data.weaknesses));
+          if (data.categoryScores || data.category_scores) {
+            const nextScores = scoreMapFromCategories(data.categoryScores || data.category_scores, data.score || data.ai_score);
+            setScores(nextScores);
+            if (data.final_score === undefined && data.score === undefined) setFinal(sumScores(nextScores));
           }
         } catch (e) {
           setDraft(response);
