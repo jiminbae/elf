@@ -206,7 +206,7 @@ export const dbService = {
   },
 
   // 3. Fetch detailed contents of a specific submission
-  async getSubmissionContent(submissionId, assignmentType) {
+  async getSubmissionContent(submissionId, assignmentType, fallback = {}) {
     try {
       const { data, error } = await supabase
         .from('submission_contents')
@@ -235,11 +235,31 @@ export const dbService = {
 
       if (error) console.warn(`Submission content fetch failed for submission ${submissionId}:`, error.message);
 
-      const { data: submission, error: submissionError } = await supabase
+      let submission = null;
+      let submissionError = null;
+
+      const byId = await supabase
         .from('submissions')
         .select('file_name, content, file_path, file_mime, file_size, created_at, submitted_at')
         .eq('id', submissionId)
-        .single();
+        .maybeSingle();
+
+      submission = byId.data;
+      submissionError = byId.error;
+
+      if (!submission && fallback.studentId && fallback.assignmentTitle) {
+        const byStudentAndAssignment = await supabase
+          .from('submissions')
+          .select('file_name, content, file_path, file_mime, file_size, created_at, submitted_at')
+          .eq('student_id', fallback.studentId)
+          .eq('assignment_title', fallback.assignmentTitle)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        submission = byStudentAndAssignment.data;
+        submissionError = byStudentAndAssignment.error;
+      }
 
       if (submissionError || !submission) {
         if (submissionError) console.warn(`Submission fallback fetch failed for submission ${submissionId}:`, submissionError.message);

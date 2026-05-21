@@ -47,20 +47,26 @@ function normalizeScore(value) {
 
 function normalizeQueueStudent(student) {
   return {
-    id: student.id,
+    id: student.submission_id || student.id,
+    submission_id: student.submission_id || student.id,
     feedback_id: student.feedback_id,
-    no: student.no || '-',
-    name: student.name || '이름 없음',
-    submittedAt: student.submittedAt || '-',
-    aiScore: normalizeScore(student.aiScore),
-    finalScore: normalizeScore(student.finalScore),
+    no: student.no || student.student_id || '-',
+    name: student.name || student.student_name || '이름 없음',
+    submittedAt: student.submittedAt || student.submitted_at || '-',
+    aiScore: normalizeScore(student.aiScore ?? student.ai_score),
+    finalScore: normalizeScore(student.finalScore ?? student.final_score),
     status: student.status,
     suspicion: student.suspicion ?? 0,
     similarity: student.similarity ?? 0,
-    hasWarning: Boolean(student.hasWarning),
-    hasSimWarning: Boolean(student.hasSimWarning),
-    assignmentTitle: student.assignmentTitle,
-    assignmentType: student.assignmentType,
+    hasWarning: Boolean(student.hasWarning ?? student.has_warning),
+    hasSimWarning: Boolean(student.hasSimWarning ?? student.has_sim_warning),
+    assignmentTitle: student.assignmentTitle || student.assignment_title,
+    assignmentType: student.assignmentType || student.assignment_type,
+    fileName: student.fileName || student.file_name,
+    filePath: student.filePath || student.file_path,
+    fileMime: student.fileMime || student.file_mime,
+    fileSize: student.fileSize || student.file_size,
+    content: student.content,
   };
 }
 

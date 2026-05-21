@@ -209,11 +209,28 @@ export default function Home() {
 
     async function loadContent() {
       const currentAssn = assignmentsList.find(a => a.id === activeAssn) || { type: activeAssn };
-      const data = await dbService.getSubmissionContent(focusedId, currentAssn.type);
+      const focusedSubmission = submissionsList.find(s => s.id === focusedId || s.submission_id === focusedId);
+      const data = await dbService.getSubmissionContent(focusedId, currentAssn.type, {
+        studentId: focusedSubmission?.no,
+        assignmentTitle: focusedSubmission?.assignmentTitle || currentAssn.title,
+      });
+
+      if (!data && focusedSubmission?.content) {
+        const content = focusedSubmission.content;
+        setDetailedContent({
+          filename: focusedSubmission.fileName || 'code.py',
+          lines: String(content).split(/\r?\n/).length,
+          bytes: focusedSubmission.fileSize || new TextEncoder().encode(String(content)).length,
+          submittedAt: focusedSubmission.submittedAt,
+          tokens: String(content).split(/\r?\n/).map(line => ([{ t: line || ' ', c: line.trim().startsWith('#') ? 'cmt' : '' }])),
+        });
+        return;
+      }
+
       setDetailedContent(data);
     }
     loadContent();
-  }, [focusedId, activeAssn, assignmentsList, mounted]);
+  }, [focusedId, activeAssn, assignmentsList, submissionsList, mounted]);
 
   // 4. Fetch student assignments when role changes to student
   React.useEffect(() => {
