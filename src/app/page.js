@@ -21,6 +21,21 @@ function clearLocalAssignments() {
   window.localStorage.removeItem(LOCAL_ASSIGNMENTS_KEY);
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = String(reader.result);
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64);
+    };
+
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function isToday(value) {
   if (!value) return false;
   const date = new Date(value);
@@ -542,12 +557,17 @@ export default function Home() {
       if (!assn || !selectedStudent) return;
 
       try {
+        const submissionFile = submission.file
+          ? await fileToBase64(submission.file)
+          : '';
+
         const result = await n8nService.submitAssignment({
           student_name: selectedStudent.studentName,
           student_id: selectedStudent.studentId,
           assignment_title: assn.title,
           assignment_type: assn.type || 'essay',
           file_name: submission.fileName,
+          submission_file: submissionFile,
           rubric: assn.rubric || '',
           content: submission.content,
           test_cases: [],
