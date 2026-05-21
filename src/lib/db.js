@@ -20,8 +20,8 @@ function mapSubmission(item) {
   return {
     id: item.id,
     submission_id: item.id, // reference helper
-    no: student.student_no || '',
-    name: student.name || '알 수 없음',
+    no: student.student_no || student.student_id || '',
+    name: student.student_name || student.name || '알 수 없음',
     submittedAt: item.submitted_at,
     aiScore: item.ai_score,
     finalScore: item.final_score,
@@ -31,12 +31,49 @@ function mapSubmission(item) {
     hasWarning: item.has_warning,
     hasSimWarning: item.has_sim_warning,
     isFocus: item.is_focus,
-    tests: item.tests
+    tests: item.tests,
+    taFeedback: item.ta_feedback || item.feedback || '',
   };
+}
+
+function parseJson(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
 }
 
 export const dbService = {
   async getStudents() {
+    if (supabase.isConfigured) {
+      try {
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, student_name, student_id, email')
+          .order('student_id', { ascending: true });
+
+        if (!error && Array.isArray(data) && data.length > 0) {
+          return data.map(student => ({
+            id: student.id,
+            studentName: student.student_name || student.name || '',
+            studentId: student.student_id || student.student_no || '',
+            email: student.email || '',
+          })).filter(student => student.studentId);
+        }
+
+        if (error) {
+          console.warn('Student fetch failed:', error.message);
+        }
+      } catch (err) {
+        console.error('Failed to fetch students from Supabase:', err);
+      }
+    }
+
     try {
       const students = await n8nService.listStudents();
       if (students.length > 0) {
@@ -48,36 +85,7 @@ export const dbService = {
       }
     }
 
-    try {
-      if (!supabase.isConfigured) {
-        return SAMPLE_STUDENTS;
-      }
-
-      const { data, error } = await supabase
-        .from('students')
-        .select('id, student_name, student_id, email')
-        .order('student_id', { ascending: true });
-
-      if (error || !data) {
-        if (error) console.warn('Student fetch failed:', error.message);
-        return SAMPLE_STUDENTS;
-      }
-
-      if (data.length === 0) {
-        console.warn('No students returned from Supabase. Check the project URL and SELECT/RLS policy for public.students.');
-        return SAMPLE_STUDENTS;
-      }
-
-      return data.map(student => ({
-        id: student.id,
-        studentName: student.student_name,
-        studentId: student.student_id,
-        email: student.email || '',
-      }));
-    } catch (err) {
-      console.error('Failed to fetch students:', err);
-      return SAMPLE_STUDENTS;
-    }
+    return SAMPLE_STUDENTS;
   },
 
   async createAssignment(payload) {
@@ -221,19 +229,29 @@ export const dbService = {
   },
 
   // 4. Update submission scores and status
-  async updateGrade(submissionId, score, status = 'graded') {
+  async updateGrade(submissionId, score, status = 'graded', feedback = '', categoryScores = []) {
     try {
       if (!supabase.isConfigured) {
         return { success: false, skipped: true, error: 'Supabase credentials not configured' };
       }
 
+      const updatePayload = {
+        final_score: score,
+        status,
+        graded_at: new Date().toISOString(),
+      };
+
+      if (feedback) {
+        updatePayload.ta_feedback = feedback;
+      }
+
+      if (Array.isArray(categoryScores) && categoryScores.length > 0) {
+        updatePayload.category_scores = categoryScores;
+      }
+
       const { data, error } = await supabase
         .from('submissions')
-        .update({
-          final_score: score,
-          status: status,
-          graded_at: new Date().toISOString()
-        })
+        .update(updatePayload)
         .eq('id', submissionId)
         .select();
 
@@ -298,11 +316,18 @@ export const dbService = {
           title: sub.assignment_title || '',
           type: sub.assignment_type || 'essay',
           status: sub.status === 'ai_graded' ? 'pending' : sub.status,
-          score: sub.final_score || sub.ai_score,
+          score: sub.final_score ?? sub.ai_score ?? 0,
           total: 10,
           submittedAt: sub.submitted_at || sub.created_at || '',
           deadline: '',
           fileName: sub.file_name || '',
+          taFeedback: sub.ta_feedback || sub.feedback || '',
+          category_scores: parseJson(sub.category_scores),
+          strengths: parseJson(sub.strengths),
+          weaknesses: parseJson(sub.weaknesses),
+          mistakes: parseJson(sub.mistakes),
+          learning_recommendations: parseJson(sub.learning_recommendations),
+          next_steps: parseJson(sub.next_steps),
         }));
       }
 
@@ -329,19 +354,29 @@ export const dbService = {
         const assn = sub.assignment || {};
         return {
           id: sub.id,
+          assignmentId: sub.assignment_id || sub.assignment_title || sub.id,
+          submission_id: sub.id,
+          feedback_id: sub.feedback_id,
           course: assn.course || '',
-          courseShort: assn.course_short || '',
-          title: assn.title || '',
-          type: assn.type || 'essay',
+          courseShort: assn.course_short || assn.course || '',
+          title: assn.title || sub.assignment_title || '',
+          type: assn.type || sub.assignment_type || 'essay',
           status: sub.status,
-          score: sub.final_score,
+          score: sub.final_score ?? sub.ai_score ?? 0,
           total: 10,
           avg: assn.avg || null,
           rank: sub.rank || '',
           gradedAt: sub.graded_at || '',
-          submittedAt: sub.submitted_at || '',
+          submittedAt: sub.submitted_at || sub.created_at || '',
           deadline: assn.deadline || '',
-          grader: sub.grader || ''
+          grader: sub.grader || '',
+          taFeedback: sub.ta_feedback || sub.feedback || '',
+          category_scores: parseJson(sub.category_scores),
+          strengths: parseJson(sub.strengths),
+          weaknesses: parseJson(sub.weaknesses),
+          mistakes: parseJson(sub.mistakes),
+          learning_recommendations: parseJson(sub.learning_recommendations),
+          next_steps: parseJson(sub.next_steps),
         };
       });
     } catch (err) {

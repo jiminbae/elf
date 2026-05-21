@@ -335,8 +335,8 @@ export default function Home() {
       if (!focused) return;
 
       const score = typeof approval === 'number' ? approval : approval.finalScore;
-      const taFeedback = typeof approval === 'number' ? '' : approval.taFeedback;
-      const categoryScores = typeof approval === 'number' ? [] : approval.categoryScores;
+      const taFeedback = typeof approval === 'number' ? '' : approval.taFeedback || approval.summary || '';
+      const categoryScores = typeof approval === 'number' ? [] : approval.category_scores || approval.categoryScores || [];
       let n8nSynced = false;
 
       try {
@@ -355,8 +355,14 @@ export default function Home() {
         }
       }
 
-      // OPTIONAL: Update on database
-      const res = await dbService.updateGrade(focused.id, score, 'graded');
+      const res = await dbService.updateGrade(
+        focused.id,
+        score,
+        'graded',
+        taFeedback,
+        categoryScores
+      );
+
       if (n8nSynced) {
         showToast("승인 완료 — n8n 워크플로우까지 전송되었습니다.", "good");
       } else if (res.success) {
@@ -365,7 +371,6 @@ export default function Home() {
         showToast("승인 완료 (로컬 반영)", "good");
       }
 
-      // Refresh list to show updated grade
       const updated = await dbService.getSubmissions(activeAssn, A.type);
       setSubmissionsList(updated);
       
