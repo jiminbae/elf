@@ -208,6 +208,34 @@ export const dbService = {
   // 3. Fetch detailed contents of a specific submission
   async getSubmissionContent(submissionId, assignmentType, fallback = {}) {
     try {
+      const n8nContent = await n8nService.getSubmissionContent(submissionId);
+      if (n8nContent) {
+        if (assignmentType === 'essay') {
+          return {
+            title: n8nContent.filename || '제출 내용',
+            author: '',
+            course: '',
+            paragraphs: String(n8nContent.content || '').split(/\n\s*\n/).filter(Boolean),
+          };
+        }
+
+        return {
+          filename: n8nContent.filename || n8nContent.file_name || 'code.py',
+          lines: n8nContent.lines || 0,
+          bytes: n8nContent.bytes || n8nContent.file_size || 0,
+          submittedAt: n8nContent.submittedAt || n8nContent.submitted_at,
+          tokens: Array.isArray(n8nContent.tokens) ? n8nContent.tokens : codeToTokens(n8nContent.content || ''),
+          filePath: n8nContent.filePath || n8nContent.file_path || '',
+          mime: n8nContent.mime || n8nContent.file_mime || '',
+        };
+      }
+    } catch (err) {
+      if (err.result?.configured !== false) {
+        console.warn(`n8n submission content fetch failed for submission ${submissionId}:`, err.message);
+      }
+    }
+
+    try {
       const { data, error } = await supabase
         .from('submission_contents')
         .select('*')

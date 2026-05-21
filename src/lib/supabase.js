@@ -18,6 +18,8 @@ function createDisabledSupabaseClient() {
     order: () => client,
     eq: () => client,
     single: () => client,
+    maybeSingle: () => client,
+    limit: () => client,
     update: () => client,
   };
 

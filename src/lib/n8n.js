@@ -7,6 +7,7 @@ const WEBHOOKS = {
   listStudents: 'student/list',
   regenerateFeedback: 'feedback/regenerate',
   taQueue: 'ta/queue',
+  submissionContent: 'submission/content',
 };
 
 async function callWebhook(path, payload = {}) {
@@ -133,6 +134,11 @@ export const n8nService = {
 
   async getStudentResult(submissionId) {
     return callWebhook(WEBHOOKS.studentResult, { submission_id: submissionId });
+  },
+
+  async getSubmissionContent(submissionId) {
+    const data = await callWebhook(WEBHOOKS.submissionContent, { submission_id: submissionId });
+    return data?.content || data;
   },
 
   async regenerateFeedback(submissionId, tone = 'encouraging') {
