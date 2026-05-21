@@ -1013,7 +1013,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .q-list { background: var(--white); border: 1px solid var(--ink-200); border-radius: var(--r-lg); overflow: hidden; }
 .q-row {
   display: grid;
-  grid-template-columns: 36px 1.2fr 80px 100px 160px 130px 90px 36px;
+  grid-template-columns: 40px 2.2fr 1.5fr 1.2fr 2fr 2fr 1.5fr 40px;
   align-items: center;
   padding: 12px 18px;
   border-bottom: 1px solid var(--ink-150);
@@ -1036,8 +1036,8 @@ input, textarea, select { font: inherit; color: inherit; }
 .q-row .name { font-weight: 600; color: var(--ink-900); }
 .q-row .id { color: var(--ink-500); font-size: 12px; }
 .q-row .ai-score { font-weight: 700; font-variant-numeric: tabular-nums; }
-.q-meter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-600); }
-.q-meter .bar { width: 90px; }
+.q-meter { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-600); width: 100%; padding-right: 12px; }
+.q-meter .bar { flex: 1; min-width: 40px; }
 
 .q-summary-bar {
   display: flex; align-items: center; gap: 18px;
