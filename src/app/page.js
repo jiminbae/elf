@@ -561,6 +561,8 @@ export default function Home() {
           ? await fileToBase64(submission.file)
           : '';
         const submissionFileName = submission.file?.name || submission.fileName;
+        const submissionFileMime = submission.file?.type || 'text/x-python';
+        const submissionFileSize = submission.file?.size || 0;
 
         const result = await n8nService.submitAssignment({
           student_name: selectedStudent.studentName,
@@ -568,10 +570,13 @@ export default function Home() {
           assignment_title: assn.title,
           assignment_type: assn.type || 'essay',
           file_name: submissionFileName,
+          file_base64: submissionFile,
+          file_mime: submissionFileMime,
+          file_size: submissionFileSize,
           submission_file: submissionFile,
           submission_file_name: submissionFileName,
-          submission_file_mime: submission.file?.type || '',
-          submission_file_size: submission.file?.size || 0,
+          submission_file_mime: submissionFileMime,
+          submission_file_size: submissionFileSize,
           submission_file_base64: submissionFile,
           rubric: assn.rubric || '',
           content: submission.content,

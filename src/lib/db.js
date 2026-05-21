@@ -36,6 +36,19 @@ function mapSubmission(item) {
   };
 }
 
+
+function getTextByteSize(value) {
+  const text = String(value || '');
+  if (typeof TextEncoder !== 'undefined') {
+    return new TextEncoder().encode(text).length;
+  }
+  return text.length;
+}
+
+function codeToTokens(content) {
+  return String(content || '').split(/\r?\n/).map(line => ([{ t: line || ' ', c: line.trim().startsWith('#') ? 'cmt' : '' }]));
+}
+
 function parseJson(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -201,19 +214,16 @@ export const dbService = {
         .eq('submission_id', submissionId)
         .single();
 
-      if (error || !data) {
-        if (error) console.warn(`Submission content fetch failed for submission ${submissionId}:`, error.message);
-        return null;
-      }
+      if (!error && data) {
+        if (assignmentType === 'essay') {
+          return {
+            title: data.essay_title || '제목 없음',
+            author: data.essay_author || '저자 없음',
+            course: data.essay_course || '과목 없음',
+            paragraphs: data.paragraphs || []
+          };
+        }
 
-      if (assignmentType === 'essay') {
-        return {
-          title: data.essay_title || '제목 없음',
-          author: data.essay_author || '저자 없음',
-          course: data.essay_course || '과목 없음',
-          paragraphs: data.paragraphs || []
-        };
-      } else {
         return {
           filename: data.filename || 'code.py',
           lines: data.lines || 0,
@@ -222,6 +232,40 @@ export const dbService = {
           tokens: data.tokens || []
         };
       }
+
+      if (error) console.warn(`Submission content fetch failed for submission ${submissionId}:`, error.message);
+
+      const { data: submission, error: submissionError } = await supabase
+        .from('submissions')
+        .select('file_name, content, file_path, file_mime, file_size, created_at, submitted_at')
+        .eq('id', submissionId)
+        .single();
+
+      if (submissionError || !submission) {
+        if (submissionError) console.warn(`Submission fallback fetch failed for submission ${submissionId}:`, submissionError.message);
+        return null;
+      }
+
+      if (assignmentType === 'essay') {
+        return {
+          title: submission.file_name || '제출 내용',
+          author: '',
+          course: '',
+          paragraphs: String(submission.content || '').split(/\n\s*\n/).filter(Boolean),
+        };
+      }
+
+      const content = submission.content || '';
+
+      return {
+        filename: submission.file_name || 'code.py',
+        lines: content ? String(content).split(/\r?\n/).length : 0,
+        bytes: submission.file_size || getTextByteSize(content),
+        submittedAt: submission.submitted_at || submission.created_at,
+        tokens: codeToTokens(content),
+        filePath: submission.file_path || '',
+        mime: submission.file_mime || '',
+      };
     } catch (err) {
       console.error(`Failed to fetch submission content for ${submissionId}:`, err);
       return null;
