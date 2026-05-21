@@ -206,10 +206,10 @@ function PendingCard() {
 function SubmitAssignmentCard({ a, onSubmit }) {
   const [studentName, setStudentName] = React.useState('');
   const [studentId, setStudentId] = React.useState('');
-  const [fileName, setFileName] = React.useState(a.type === 'code' ? 'submission.py' : 'submission.txt');
+  const [file, setFile] = React.useState(null);
   const [content, setContent] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
-  const canSubmit = studentName.trim() && studentId.trim() && content.trim();
+  const canSubmit = studentName.trim() && studentId.trim() && (content.trim() || file);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -220,8 +220,9 @@ function SubmitAssignmentCard({ a, onSubmit }) {
       await onSubmit({
         studentName: studentName.trim(),
         studentId: studentId.trim(),
-        fileName: fileName.trim() || 'submission.txt',
+        fileName: file ? file.name : (a.type === 'code' ? 'submission.py' : 'submission.txt'),
         content: content.trim(),
+        file: file,
       });
     } finally {
       setSubmitting(false);
@@ -252,12 +253,11 @@ function SubmitAssignmentCard({ a, onSubmit }) {
         </label>
       </div>
       <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 600, marginTop: 12 }}>
-        파일명
+        과제 파일 첨부
         <input
-          value={fileName}
-          onChange={e => setFileName(e.target.value)}
-          placeholder={a.type === 'code' ? 'submission.py' : 'submission.txt'}
-          style={{ padding: "10px 12px", border: "1px solid var(--ink-300)", borderRadius: 6 }}
+          type="file"
+          onChange={e => setFile(e.target.files[0] || null)}
+          style={{ padding: "8px 12px", border: "1px dashed var(--ink-300)", borderRadius: 6, background: "white", fontSize: 13, cursor: "pointer" }}
         />
       </label>
       <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 600, marginTop: 12 }}>

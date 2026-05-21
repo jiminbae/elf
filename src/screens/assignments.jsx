@@ -8,6 +8,7 @@ const EMPTY_FORM = {
   deadline: '',
   description: '',
   rubric: '',
+  referenceFile: null,
 };
 
 function formatDeadline(value) {
@@ -117,7 +118,13 @@ export function AssignmentsView({ onOpenAssignment, onCreateAssignment, assignme
                 rows={3}
                 value={form.rubric}
                 onChange={e => updateForm('rubric', e.target.value)}
-                style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--ai-300)", borderRadius: 6, resize: "vertical" }}
+                style={{ width: "100%", padding: "10px 12px", border: "1px solid var(--ai-300)", borderRadius: 6, resize: "vertical", marginBottom: 12 }}
+              />
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>기준 파일 (정답 코드, 가이드라인 등)</label>
+              <input
+                type="file"
+                onChange={e => updateForm('referenceFile', e.target.files[0] || null)}
+                style={{ width: "100%", padding: "8px", border: "1px dashed var(--ai-400)", borderRadius: 6, background: "white", fontSize: 13, cursor: "pointer" }}
               />
             </div>
 

@@ -315,13 +315,37 @@ function AIPanel({
     { k: "c", name: "논리적 구성", max: 2 },
     { k: "d", name: "문장 표현", max: 2 },
   ];
+  const [strengths, setStrengths] = React.useState([
+    "소외를 가족·노동·자아 세 층위로 정리한 구조가 명확함",
+    "2문단에서 그레테의 발화를 직접 인용해 분석을 뒷받침함"
+  ]);
+  const [weaknesses, setWeaknesses] = React.useState([
+    "3문단: 마르크스 이론을 일반론으로만 인용, 작품 텍스트와 연결 약함",
+    "결론이 도입부에서 제시한 세 층위를 충분히 종합하지 못함"
+  ]);
+
   const handleRegenerate = async () => {
     if (!onRegenerate || regenerating) return;
 
     setRegenerating(true);
     try {
-      const nextDraft = await onRegenerate(tone);
-      if (nextDraft) setDraft(nextDraft);
+      const response = await onRegenerate("중립");
+      if (response) {
+        try {
+          // JSON 파싱 시도
+          const data = typeof response === 'string' ? JSON.parse(response) : response;
+          if (data.feedback) setDraft(data.feedback);
+          if (data.score !== undefined) setFinalScore(data.score);
+          if (data.strengths && Array.isArray(data.strengths)) setStrengths(data.strengths);
+          if (data.weaknesses && Array.isArray(data.weaknesses)) setWeaknesses(data.weaknesses);
+          if (data.categoryScores) {
+            setScores(prev => ({ ...prev, ...data.categoryScores }));
+          }
+        } catch (e) {
+          // 파싱 실패 시 일반 텍스트 피드백으로 취급
+          setDraft(response);
+        }
+      }
     } finally {
       setRegenerating(false);
     }
@@ -351,7 +375,6 @@ function AIPanel({
         <span className="aiscore__lbl">추천 점수</span>
         <span className="aiscore__big">{aiRecommended.toFixed(1)}</span>
         <span className="aiscore__den">/ 10</span>
-        <span className="aiscore__delta">↗ 반평균 대비 +0.1</span>
       </div>
 
       <div className="rubric">
@@ -377,20 +400,22 @@ function AIPanel({
         ))}
       </div>
 
-      <div className="aibox good" style={{ marginTop: 14 }}>
-        <h4><Icon.thumbsUp width="13" height="13" /> 강점</h4>
-        <ul>
-          <li>소외를 가족·노동·자아 세 층위로 정리한 구조가 명확함</li>
-          <li>2문단에서 그레테의 발화를 직접 인용해 분석을 뒷받침함</li>
-        </ul>
-      </div>
-      <div className="aibox warn">
-        <h4><Icon.alert width="13" height="13" /> 약점</h4>
-        <ul>
-          <li>3문단: 마르크스 이론을 일반론으로만 인용, 작품 텍스트와 연결 약함</li>
-          <li>결론이 도입부에서 제시한 세 층위를 충분히 종합하지 못함</li>
-        </ul>
-      </div>
+      {strengths.length > 0 && (
+        <div className="aibox good" style={{ marginTop: 14 }}>
+          <h4><Icon.thumbsUp width="13" height="13" /> 강점</h4>
+          <ul>
+            {strengths.map((s, idx) => <li key={idx}>{s}</li>)}
+          </ul>
+        </div>
+      )}
+      {weaknesses.length > 0 && (
+        <div className="aibox warn">
+          <h4><Icon.alert width="13" height="13" /> 약점</h4>
+          <ul>
+            {weaknesses.map((w, idx) => <li key={idx}>{w}</li>)}
+          </ul>
+        </div>
+      )}
 
       <div className="aimeta">
         <div className="aimeta__cell" style={{ background: "var(--warn-50)", borderColor: "var(--warn-100)" }}>
@@ -426,11 +451,7 @@ function AIPanel({
         <textarea value={draft} onChange={e => setDraft(e.target.value)} />
       </div>
 
-      <div className="tone-row">
-        {["격려 톤", "중립", "엄격"].map(t => (
-          <button key={t} className={"tone " + (tone === t ? "is-active" : "")} onClick={() => setTone(t)}>{t}</button>
-        ))}
-      </div>
+
 
       <div className="final">
         <span className="final__lbl">최종 점수</span>

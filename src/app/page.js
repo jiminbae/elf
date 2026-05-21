@@ -257,8 +257,12 @@ export default function Home() {
         assignment_type: draft.type || 'essay',
         rubric: draft.rubric || '',
         description: draft.description || '',
-        deadline: draft.deadline || '',
+        deadline: draft.deadlineLabel || draft.deadline || '',
       });
+
+      if (!created.deadline) {
+        created.deadline = draft.deadlineLabel || draft.deadline;
+      }
 
       openCreatedAssignment(created);
       showToast("새 과제가 n8n에 저장되었습니다.", "good");

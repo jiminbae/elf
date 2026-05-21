@@ -263,13 +263,34 @@ function CodeAIPanel({
     { k: "c", name: "코드 스타일", max: 2 },
     { k: "d", name: "시간복잡도", max: 1, warn: true },
   ];
+  const [strengths, setStrengths] = React.useState([
+    "클래스 구조와 메서드 시그니처를 정확히 잡았습니다",
+    "push, peek 동작이 의도대로 구현되었습니다"
+  ]);
+  const [weaknesses, setWeaknesses] = React.useState([
+    "등록된 개선 항목이 없습니다"
+  ]);
+
   const handleRegenerate = async () => {
     if (!onRegenerate || regenerating) return;
 
     setRegenerating(true);
     try {
-      const nextDraft = await onRegenerate(tone);
-      if (nextDraft) setDraft(nextDraft);
+      const response = await onRegenerate("중립");
+      if (response) {
+        try {
+          const data = typeof response === 'string' ? JSON.parse(response) : response;
+          if (data.feedback) setDraft(data.feedback);
+          if (data.score !== undefined) setFinal(data.score);
+          if (data.strengths && Array.isArray(data.strengths)) setStrengths(data.strengths);
+          if (data.weaknesses && Array.isArray(data.weaknesses)) setWeaknesses(data.weaknesses);
+          if (data.categoryScores) {
+            setScores(prev => ({ ...prev, ...data.categoryScores }));
+          }
+        } catch (e) {
+          setDraft(response);
+        }
+      }
     } finally {
       setRegenerating(false);
     }
@@ -298,7 +319,6 @@ function CodeAIPanel({
         <span className="aiscore__lbl">추천 점수</span>
         <span className="aiscore__big">{ai.toFixed(1)}</span>
         <span className="aiscore__den">/ 10</span>
-        <span className="aiscore__delta">↗ 반평균 대비 +0.3</span>
       </div>
 
       <div className="rubric">
@@ -320,19 +340,22 @@ function CodeAIPanel({
         ))}
       </div>
 
-      <div className="aibox good" style={{ marginTop: 14 }}>
-        <h4><Icon.thumbsUp width="13" height="13" /> 강점</h4>
-        <ul>
-          <li>클래스 구조와 메서드 시그니처를 정확히 잡았습니다</li>
-          <li>push, peek 동작이 의도대로 구현되었습니다</li>
-        </ul>
-      </div>
-      <div className="aibox warn">
-        <h4><Icon.alert width="13" height="13" /> 약점</h4>
-        <ul>
-          <li>등록된 개선 항목이 없습니다</li>
-        </ul>
-      </div>
+      {strengths.length > 0 && (
+        <div className="aibox good" style={{ marginTop: 14 }}>
+          <h4><Icon.thumbsUp width="13" height="13" /> 강점</h4>
+          <ul>
+            {strengths.map((s, idx) => <li key={idx}>{s}</li>)}
+          </ul>
+        </div>
+      )}
+      {weaknesses.length > 0 && (
+        <div className="aibox warn">
+          <h4><Icon.alert width="13" height="13" /> 약점</h4>
+          <ul>
+            {weaknesses.map((w, idx) => <li key={idx}>{w}</li>)}
+          </ul>
+        </div>
+      )}
 
       <div className="aimeta">
         <div className="aimeta__cell">
@@ -362,11 +385,7 @@ function CodeAIPanel({
         <textarea value={draft} onChange={e => setDraft(e.target.value)} />
       </div>
 
-      <div className="tone-row">
-        {["격려 톤", "중립", "엄격"].map(t => (
-          <button key={t} className={"tone " + (tone === t ? "is-active" : "")} onClick={() => setTone(t)}>{t}</button>
-        ))}
-      </div>
+
 
       <div className="final">
         <span className="final__lbl">최종 점수</span>
