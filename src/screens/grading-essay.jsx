@@ -19,6 +19,13 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
   const total = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
   React.useEffect(() => { setFinal(total); }, [total]);
 
+  const [aiChecks, setAiChecks] = React.useState([
+    { type: "info", message: "작중 직접 인용 2건 — 모두 원문과 일치 (그레테 3장 발화 / 그레고르 1장 내적 독백)" },
+    { type: "info", message: "도입–본론(3층위)–결론 구조 명확 · 단락별 길이 균형 양호" },
+    { type: "warn", message: "3문단: 외부 이론(마르크스) 인용에 대한 작품 텍스트 연결 부족" },
+    { type: "warn", message: "결론부가 서론에서 제시한 세 층위를 종합하지 못함" },
+  ]);
+
   const aiPanel = (
     <AIPanel
       tab={tab}
@@ -36,6 +43,8 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
       onRegenerate={onRegenerate}
       onOpenWarn={onOpenWarn}
       onOpenSimilarity={onOpenSimilarity}
+      aiChecks={aiChecks}
+      setAiChecks={setAiChecks}
     />
   );
 
@@ -47,12 +56,13 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
         {tab === "submission" ? (
           <EssaySubmission openPop={openPop} setOpenPop={setOpenPop} essayDoc={submissionContent} focusedStudent={focusedStudent} />
         ) : tab === "ai" ? (
-          <AIAnalysisPane />
+          <>
+            <AIAnalysisPane />
+            <AIChecks items={aiChecks} />
+          </>
         ) : (
           <SimilarityPane onOpenSimilarity={onOpenSimilarity} />
         )}
-
-        <AIChecks />
 
         {aiLayout === "inline" ? <div className="inline-aipanel">{aiPanel}</div> : null}
       </div>
@@ -195,7 +205,7 @@ function InlinePop({ note, hl, onClose }) {
 }
 
 // ---------- AI checks block (under essay) ----------
-function AIChecks() {
+function AIChecks({ items = [] }) {
   return (
     <div className="card mt-16" style={{ marginTop: 16 }}>
       <div className="checks">
@@ -203,12 +213,20 @@ function AIChecks() {
           <Icon.spark width="14" height="14" style={{ color: "var(--ai-700)" }} />
           <strong>AI 인용·논리 검증</strong>
           <span className="spacer" />
-          <span className="summary">총 4개 항목 점검 · 23초 전</span>
+          <span className="summary">총 {items.length}개 항목 점검 · 방금 전</span>
         </div>
-        <div className="check"><span className="ico"><Icon.check width="14" height="14" /></span><span>작중 직접 인용 2건 — 모두 원문과 일치 (그레테 3장 발화 / 그레고르 1장 내적 독백)</span></div>
-        <div className="check"><span className="ico"><Icon.check width="14" height="14" /></span><span>도입–본론(3층위)–결론 구조 명확 · 단락별 길이 균형 양호</span></div>
-        <div className="check warn"><span className="ico"><Icon.alert width="14" height="14" /></span><span>3문단: 외부 이론(마르크스) 인용에 대한 작품 텍스트 연결 부족</span></div>
-        <div className="check warn"><span className="ico"><Icon.alert width="14" height="14" /></span><span>결론부가 서론에서 제시한 세 층위를 충분히 종합하지 못함</span></div>
+        {items.map((item, idx) => {
+          const isWarn = item.type === "warn";
+          const isBad = item.type === "bad";
+          return (
+            <div key={idx} className={`check${isWarn ? " warn" : isBad ? " bad" : ""}`}>
+              <span className="ico">
+                {isWarn || isBad ? <Icon.alert width="14" height="14" /> : <Icon.check width="14" height="14" />}
+              </span>
+              <span>{item.message}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -305,6 +323,7 @@ function AIPanel({
   scores, setScores, tone, setTone,
   draft, setDraft,
   finalScore, setFinalScore, onApprove, onRegenerate, onOpenWarn, onOpenSimilarity,
+  aiChecks, setAiChecks,
 }) {
   const [regenerating, setRegenerating] = React.useState(false);
   const aiRecommended = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
@@ -338,6 +357,7 @@ function AIPanel({
           if (data.score !== undefined) setFinalScore(data.score);
           if (data.strengths && Array.isArray(data.strengths)) setStrengths(data.strengths);
           if (data.weaknesses && Array.isArray(data.weaknesses)) setWeaknesses(data.weaknesses);
+          if (data.aiChecks && Array.isArray(data.aiChecks)) setAiChecks(data.aiChecks);
           if (data.categoryScores) {
             setScores(prev => ({ ...prev, ...data.categoryScores }));
           }
