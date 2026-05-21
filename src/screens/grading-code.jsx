@@ -1,7 +1,25 @@
 import React from 'react';
 import { Icon } from '../icons';
 
+function codeToDisplaySubmission(submissionContent, focusedStudent) {
+  if (submissionContent) return submissionContent;
+
+  const content = focusedStudent?.content || '';
+  if (!content && !focusedStudent?.fileName) return null;
+
+  return {
+    filename: focusedStudent?.fileName || 'code.py',
+    lines: content ? String(content).split(/\r?\n/).length : 0,
+    bytes: focusedStudent?.fileSize || (content ? new TextEncoder().encode(String(content)).length : 0),
+    submittedAt: focusedStudent?.submittedAt,
+    tokens: content
+      ? String(content).split(/\r?\n/).map(line => ([{ t: line || ' ', c: line.trim().startsWith('#') ? 'cmt' : '' }]))
+      : [],
+  };
+}
+
 export function GradingCode({ aiLayout = "right", onApprove, onRegenerate, submissionContent, focusedStudent }) {
+  const displaySubmission = codeToDisplaySubmission(submissionContent, focusedStudent);
   const [tab, setTab] = React.useState("submission");
   const [tone, setTone] = React.useState("중립");
   const [editing, setEditing] = React.useState(false);
@@ -39,8 +57,8 @@ export function GradingCode({ aiLayout = "right", onApprove, onRegenerate, submi
 
         {tab === "submission" ? (
           <>
-            <CodeFileMeta codeSubmission={submissionContent} focusedStudent={focusedStudent} />
-            <CodeBody openLineComment={openLineComment} setOpenLineComment={setOpenLineComment} codeSubmission={submissionContent} />
+            <CodeFileMeta codeSubmission={displaySubmission} focusedStudent={focusedStudent} />
+            <CodeBody openLineComment={openLineComment} setOpenLineComment={setOpenLineComment} codeSubmission={displaySubmission} />
             <RunResults open={runOpen} setOpen={setRunOpen} focusedStudent={focusedStudent} />
           </>
         ) : tab === "ai" ? (
