@@ -1,9 +1,10 @@
 import React from 'react';
 import { Icon } from '../icons';
 
-export function Landing({ onPick, metrics }) {
+export function Landing({ onPick, metrics, students = [], selectedStudentId, onSelectStudent }) {
   const taStats = metrics?.taStats || [];
   const studentStats = metrics?.studentStats || [];
+  const selectedStudent = students.find(student => student.studentId === selectedStudentId) || students[0] || null;
 
   return (
     <div className="app full-bleed" style={{ background: "var(--paper)", display: "grid", placeItems: "center", padding: 32 }}>
@@ -17,12 +18,12 @@ export function Landing({ onPick, metrics }) {
             boxShadow: "var(--sh-2)"
           }}>KNU</div>
           <div>
-            <div style={{ fontSize: 19, fontWeight: 700, letterSpacing: "-0.01em" }}>경북대학교 학습포털</div>
+            <div style={{ fontSize: 19, fontWeight: 700 }}>경북대학교 학습포털</div>
             <div style={{ fontSize: 13, color: "var(--ink-500)" }}>AI 채점 보조가 적용된 2026년 1학기 평가 시스템</div>
           </div>
           <div style={{ marginLeft: "auto", fontSize: 12, color: "var(--ink-500)" }}>
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 99, background: "var(--good-500)", marginRight: 6 }} />
-            시스템 정상 · 2026.05.19
+            시스템 정상
           </div>
         </div>
 
@@ -37,9 +38,9 @@ export function Landing({ onPick, metrics }) {
             person="조교"
             stats={taStats}
             features={[
-              "AI가 추천하는 점수·피드백 초안 검토",
-              "본문 인라인 코멘트, 라인별 코드 코멘트",
-              "유사도/인용 검증, AI 의심도 알림",
+              "AI가 추천하는 점수와 피드백 초안 검토",
+              "본문 인라인 코멘트와 코드 코멘트 확인",
+              "유사도와 인용 검증 알림 확인",
             ]}
             cta="조교로 시작하기"
             onPick={() => onPick("ta")}
@@ -47,27 +48,26 @@ export function Landing({ onPick, metrics }) {
           <RoleCard
             role="student"
             title="학생 / 피드백 화면"
-            person="학생"
+            person={selectedStudent ? `${selectedStudent.studentName} (${selectedStudent.studentId})` : "학생"}
             stats={studentStats}
+            students={students}
+            selectedStudentId={selectedStudent?.studentId || ''}
+            onSelectStudent={onSelectStudent}
             features={[
-              "항목별 점수와 AI 학습 분석 펼쳐보기",
-              "맞춤 학습 자료 미리보기",
-              "재채점 요청 / 이의 신청 흐름",
+              "선택한 학생 계정으로 과제 제출",
+              "학생별 제출 상태와 AI 피드백 유지",
+              "재채점 요청과 이의 신청 흐름 확인",
             ]}
             cta="학생으로 시작하기"
             onPick={() => onPick("student")}
           />
-        </div>
-
-        <div style={{ marginTop: 28, fontSize: 11.5, color: "var(--ink-400)", textAlign: "center", lineHeight: 1.7 }}>
-          좌측 사이드바 하단의 아바타를 클릭하면 언제든지 역할 선택 화면으로 돌아올 수 있습니다.
         </div>
       </div>
     </div>
   );
 }
 
-function RoleCard({ role, title, person, stats, features, cta, onPick }) {
+function RoleCard({ role, title, person, stats, features, cta, onPick, students = [], selectedStudentId, onSelectStudent }) {
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <div style={{
@@ -81,28 +81,44 @@ function RoleCard({ role, title, person, stats, features, cta, onPick }) {
           color: role === "ta" ? "var(--brand-700)" : "var(--ai-700)" }}>
           {role === "ta" ? "Teaching Assistant" : "Student"}
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", marginTop: 6 }}>{title}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, marginTop: 6 }}>{title}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14 }}>
           <div style={{
             width: 36, height: 36, borderRadius: 99,
             background: role === "ta" ? "var(--brand-700)" : "var(--ai-600)",
             color: "#fff", display: "grid", placeItems: "center",
             fontWeight: 700, fontSize: 13
-          }}>{role === "ta" ? "남" : "효"}</div>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 600 }}>{person}</div>
-          </div>
+          }}>{role === "ta" ? "TA" : "ST"}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{person}</div>
         </div>
       </div>
       <div style={{ padding: "16px 24px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, borderBottom: "1px solid var(--ink-150)" }}>
         {stats.map((s, i) => (
           <div key={i}>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>{s.val}</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{s.val}</div>
             <div style={{ fontSize: 11.5, color: "var(--ink-600)" }}>{s.lbl}</div>
           </div>
         ))}
       </div>
       <ul style={{ padding: "14px 24px 16px", margin: 0, listStyle: "none", flex: 1 }}>
+        {role === "student" ? (
+          <li style={{ display: "grid", gap: 6, padding: "0 0 10px", fontSize: 13, color: "var(--ink-700)" }}>
+            <span style={{ fontWeight: 700 }}>접속 학생</span>
+            <select
+              value={selectedStudentId || ''}
+              onChange={event => typeof onSelectStudent === 'function' && onSelectStudent(event.target.value)}
+              style={{ width: "100%", height: 38, border: "1px solid var(--ink-300)", borderRadius: 6, padding: "0 10px", background: "#fff", color: "var(--ink-800)", fontSize: 13 }}
+            >
+              {students.length === 0 ? (
+                <option value="">학생 데이터 없음</option>
+              ) : students.map(student => (
+                <option key={student.studentId} value={student.studentId}>
+                  {student.studentName} ({student.studentId})
+                </option>
+              ))}
+            </select>
+          </li>
+        ) : null}
         {features.map((f, i) => (
           <li key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0", fontSize: 13, color: "var(--ink-700)" }}>
             <Icon.check width="16" height="16" style={{ color: role === "ta" ? "var(--brand-700)" : "var(--ai-600)", flexShrink: 0, marginTop: 2 }} />
@@ -112,12 +128,9 @@ function RoleCard({ role, title, person, stats, features, cta, onPick }) {
       </ul>
       <div style={{ padding: "0 24px 22px" }}>
         <button className="btn btn--block" onClick={onPick}
-          style={{
-            background: role === "ta" ? "var(--brand-700)" : "var(--ai-600)",
-            color: "#fff",
-            boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.18)",
-            height: 42, fontSize: 14
-          }}>
+          style={{ background: role === "ta" ? "var(--brand-700)" : "var(--ai-600)", color: "#fff", boxShadow: "inset 0 -1px 0 rgba(0,0,0,0.18)", height: 42, fontSize: 14 }}
+          disabled={role === "student" && students.length === 0}
+        >
           {cta} <Icon.arrowR width="16" height="16" />
         </button>
       </div>

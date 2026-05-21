@@ -1,6 +1,19 @@
 import { supabase } from './supabase';
 import { n8nService } from './n8n';
 
+const SAMPLE_STUDENTS = [
+  { studentName: '김민준', studentId: '20240001', email: 'minjun.kim@example.com' },
+  { studentName: '이서연', studentId: '20240002', email: 'seoyeon.lee@example.com' },
+  { studentName: '박지훈', studentId: '20240003', email: 'jihoon.park@example.com' },
+  { studentName: '최하은', studentId: '20240004', email: 'haeun.choi@example.com' },
+  { studentName: '정도윤', studentId: '20240005', email: 'doyoon.jung@example.com' },
+  { studentName: '강지우', studentId: '20240006', email: 'jiwoo.kang@example.com' },
+  { studentName: '조현우', studentId: '20240007', email: 'hyunwoo.cho@example.com' },
+  { studentName: '윤서아', studentId: '20240008', email: 'seoa.yoon@example.com' },
+  { studentName: '장유진', studentId: '20240009', email: 'yujin.jang@example.com' },
+  { studentName: '임준서', studentId: '20240010', email: 'junseo.lim@example.com' },
+].map(student => ({ id: student.studentId, ...student }));
+
 // Helper to safely format submission from DB structure to application structure
 function mapSubmission(item) {
   const student = item.student || {};
@@ -23,6 +36,50 @@ function mapSubmission(item) {
 }
 
 export const dbService = {
+  async getStudents() {
+    try {
+      const students = await n8nService.listStudents();
+      if (students.length > 0) {
+        return students;
+      }
+    } catch (err) {
+      if (err.result?.configured !== false) {
+        console.warn('n8n student list fetch failed:', err.message);
+      }
+    }
+
+    try {
+      if (!supabase.isConfigured) {
+        return SAMPLE_STUDENTS;
+      }
+
+      const { data, error } = await supabase
+        .from('students')
+        .select('id, student_name, student_id, email')
+        .order('student_id', { ascending: true });
+
+      if (error || !data) {
+        if (error) console.warn('Student fetch failed:', error.message);
+        return SAMPLE_STUDENTS;
+      }
+
+      if (data.length === 0) {
+        console.warn('No students returned from Supabase. Check the project URL and SELECT/RLS policy for public.students.');
+        return SAMPLE_STUDENTS;
+      }
+
+      return data.map(student => ({
+        id: student.id,
+        studentName: student.student_name,
+        studentId: student.student_id,
+        email: student.email || '',
+      }));
+    } catch (err) {
+      console.error('Failed to fetch students:', err);
+      return SAMPLE_STUDENTS;
+    }
+  },
+
   async createAssignment(payload) {
     return n8nService.createAssignment(payload);
   },
@@ -195,10 +252,64 @@ export const dbService = {
     try {
       if (!studentNo) return [];
 
+      try {
+        const queue = await n8nService.getQueue();
+        const rows = Array.isArray(queue?.students)
+          ? queue.students.filter(student => student.no === studentNo)
+          : [];
+
+        if (rows.length > 0) {
+          return rows.map(row => ({
+            id: row.assignmentTitle || row.id,
+            assignmentId: row.assignmentTitle || row.id,
+            submission_id: row.id,
+            feedback_id: row.feedback_id,
+            course: queue.assignment?.course || '',
+            courseShort: queue.assignment?.courseShort || queue.assignment?.course || '',
+            title: row.assignmentTitle || queue.assignment?.title || '',
+            type: row.assignmentType || queue.assignment?.type || 'essay',
+            status: row.status === 'ready' ? 'pending' : row.status,
+            score: row.finalScore ?? row.aiScore,
+            total: 10,
+            avg: queue.assignment?.avg || null,
+            submittedAt: row.submittedAt || '',
+            deadline: queue.assignment?.deadline || '',
+            grader: row.status === 'graded' ? 'TA' : '',
+          }));
+        }
+      } catch (err) {
+        if (err.result?.configured !== false) {
+          console.warn(`n8n student assignment fetch failed for ${studentNo}:`, err.message);
+        }
+      }
+
+      const { data: textSubmissions, error: textError } = await supabase
+        .from('submissions')
+        .select('*')
+        .eq('student_id', studentNo);
+
+      if (!textError && textSubmissions && textSubmissions.length > 0) {
+        return textSubmissions.map(sub => ({
+          id: sub.assignment_title || sub.id,
+          assignmentId: sub.assignment_title || sub.id,
+          submission_id: sub.id,
+          course: '',
+          courseShort: '',
+          title: sub.assignment_title || '',
+          type: sub.assignment_type || 'essay',
+          status: sub.status === 'ai_graded' ? 'pending' : sub.status,
+          score: sub.final_score || sub.ai_score,
+          total: 10,
+          submittedAt: sub.submitted_at || sub.created_at || '',
+          deadline: '',
+          fileName: sub.file_name || '',
+        }));
+      }
+
       const { data: student } = await supabase
         .from('students')
         .select('id')
-        .eq('student_no', studentNo)
+        .eq('student_id', studentNo)
         .single();
 
       if (!student) {

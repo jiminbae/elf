@@ -78,7 +78,7 @@ export function StudentDashboard({ onOpen, assignments = [] }) {
   );
 }
 
-export function StudentFeedback({ assignment, onSubmitAssignment, onAppeal, onOpenResource }) {
+export function StudentFeedback({ assignment, student, onSubmitAssignment, onAppeal, onOpenResource }) {
   const a = assignment;
   const isGraded = a.status === "graded";
   const isSubmitted = Boolean(a.submittedAt);
@@ -121,7 +121,7 @@ export function StudentFeedback({ assignment, onSubmitAssignment, onAppeal, onOp
       <div className="s-layout mt-16" style={{ marginTop: 16 }}>
         <div>
           {/* Score breakdown — only for graded */}
-          {isGraded ? <ScoreCard a={a} /> : isSubmitted ? <PendingCard /> : <SubmitAssignmentCard a={a} onSubmit={onSubmitAssignment} />}
+          {isGraded ? <ScoreCard a={a} /> : isSubmitted ? <PendingCard /> : <SubmitAssignmentCard a={a} student={student} onSubmit={onSubmitAssignment} />}
 
           {/* TA feedback */}
           {isGraded ? <TAFeedback a={a} /> : null}
@@ -203,13 +203,11 @@ function PendingCard() {
   );
 }
 
-function SubmitAssignmentCard({ a, onSubmit }) {
-  const [studentName, setStudentName] = React.useState('');
-  const [studentId, setStudentId] = React.useState('');
+function SubmitAssignmentCard({ a, student, onSubmit }) {
   const [file, setFile] = React.useState(null);
   const [content, setContent] = React.useState('');
   const [submitting, setSubmitting] = React.useState(false);
-  const canSubmit = studentName.trim() && studentId.trim() && (content.trim() || file);
+  const canSubmit = Boolean(student?.studentName && student?.studentId && (content.trim() || file));
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -218,8 +216,8 @@ function SubmitAssignmentCard({ a, onSubmit }) {
     setSubmitting(true);
     try {
       await onSubmit({
-        studentName: studentName.trim(),
-        studentId: studentId.trim(),
+        studentName: student.studentName,
+        studentId: student.studentId,
         fileName: file ? file.name : (a.type === 'code' ? 'submission.py' : 'submission.txt'),
         content: content.trim(),
         file: file,
@@ -236,8 +234,8 @@ function SubmitAssignmentCard({ a, onSubmit }) {
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 600 }}>
           이름
           <input
-            value={studentName}
-            onChange={e => setStudentName(e.target.value)}
+            value={student?.studentName || ''}
+            readOnly
             placeholder="학생 이름"
             style={{ padding: "10px 12px", border: "1px solid var(--ink-300)", borderRadius: 6 }}
           />
@@ -245,8 +243,8 @@ function SubmitAssignmentCard({ a, onSubmit }) {
         <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 600 }}>
           학번
           <input
-            value={studentId}
-            onChange={e => setStudentId(e.target.value)}
+            value={student?.studentId || ''}
+            readOnly
             placeholder="학번"
             style={{ padding: "10px 12px", border: "1px solid var(--ink-300)", borderRadius: 6 }}
           />

@@ -4,6 +4,7 @@ const WEBHOOKS = {
   submitAssignment: 'assignment/submit',
   approveGrade: 'grade/approve',
   studentResult: 'student/result',
+  listStudents: 'student/list',
   regenerateFeedback: 'feedback/regenerate',
   taQueue: 'ta/queue',
 };
@@ -82,6 +83,18 @@ function normalizeAssignment(assignment = {}) {
   };
 }
 
+function normalizeStudent(student = {}) {
+  const studentId = student.studentId || student.student_id || student.no || '';
+  const studentName = student.studentName || student.student_name || student.name || '';
+
+  return {
+    id: student.id || studentId,
+    studentName,
+    studentId,
+    email: student.email || '',
+  };
+}
+
 export const n8nService = {
   async createAssignment(payload) {
     const data = await callWebhook(WEBHOOKS.createAssignment, payload);
@@ -97,6 +110,13 @@ export const n8nService = {
     const assignments = Array.isArray(data?.assignments) ? data.assignments : [];
     return assignments.map(normalizeAssignment);
   },
+
+  async listStudents() {
+    const data = await callWebhook(WEBHOOKS.listStudents);
+    const students = Array.isArray(data?.students) ? data.students : Array.isArray(data) ? data : [];
+    return students.map(normalizeStudent).filter(student => student.studentId && student.studentName);
+  },
+
   async submitAssignment(payload) {
     return callWebhook(WEBHOOKS.submitAssignment, payload);
   },

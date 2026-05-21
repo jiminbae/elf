@@ -98,6 +98,8 @@ export default function Home() {
   const [assignmentsList, setAssignmentsList] = React.useState([]);
   const [submissionsList, setSubmissionsList] = React.useState([]);
   const [detailedContent, setDetailedContent] = React.useState(null);
+  const [studentsList, setStudentsList] = React.useState([]);
+  const [selectedStudentId, setSelectedStudentId] = React.useState('');
   const [studentAssignments, setStudentAssignments] = React.useState([]);
   const [dbLoading, setDbLoading] = React.useState(true);
 
@@ -135,8 +137,13 @@ export default function Home() {
     setMounted(true);
     async function loadAssignments() {
       clearLocalAssignments();
-      const remoteAssignments = await dbService.getAssignments();
+      const [remoteAssignments, remoteStudents] = await Promise.all([
+        dbService.getAssignments(),
+        dbService.getStudents(),
+      ]);
       setAssignmentsList(remoteAssignments);
+      setStudentsList(remoteStudents);
+      setSelectedStudentId(prev => prev || remoteStudents[0]?.studentId || '');
       setActiveAssn(prev => prev || remoteAssignments[0]?.id || null);
       setDbLoading(false);
     }
@@ -186,14 +193,14 @@ export default function Home() {
 
   // 4. Fetch student assignments when role changes to student
   React.useEffect(() => {
-    if (role === 'student' && mounted) {
+    if (role === 'student' && mounted && selectedStudentId) {
       async function loadStudent() {
-        const data = await dbService.getStudentAssignments();
+        const data = await dbService.getStudentAssignments(selectedStudentId);
         setStudentAssignments(data);
       }
       loadStudent();
     }
-  }, [role, mounted]);
+  }, [role, mounted, selectedStudentId]);
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -286,7 +293,7 @@ export default function Home() {
     return <Landing onPick={r => {
       setRole(r);
       setView(r === "ta" ? "assignments" : "dashboard");
-    }} metrics={metrics} />;
+    }} metrics={metrics} students={studentsList} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} />;
   }
 
   // ------ TA flow ------
@@ -513,16 +520,17 @@ export default function Home() {
 
   // ------ Student flow ------
   if (role === "student") {
+    const selectedStudent = studentsList.find(student => student.studentId === selectedStudentId) || studentsList[0] || null;
     const list = buildStudentAssignmentList(assignmentsList, studentAssignments);
     const assn = list.find(a => a.id === studentAssnId) || list[0];
 
     const handleStudentSubmit = async (submission) => {
-      if (!assn) return;
+      if (!assn || !selectedStudent) return;
 
       try {
         const result = await n8nService.submitAssignment({
-          student_name: submission.studentName,
-          student_id: submission.studentId,
+          student_name: selectedStudent.studentName,
+          student_id: selectedStudent.studentId,
           assignment_title: assn.title,
           assignment_type: assn.type || 'essay',
           file_name: submission.fileName,
@@ -538,6 +546,8 @@ export default function Home() {
           assignmentId: assn.id,
           submission_id: result?.submission_id,
           feedback_id: result?.feedback_id,
+          studentId: selectedStudent.studentId,
+          studentName: selectedStudent.studentName,
           status: 'pending',
           submittedAt,
           fileName: submission.fileName,
@@ -586,6 +596,7 @@ export default function Home() {
             {assn ? (
               <StudentFeedback
                 assignment={assn}
+                student={selectedStudent}
                 onSubmitAssignment={handleStudentSubmit}
                 onAppeal={() => setAppealOpen(true)}
                 onOpenResource={(r) => setPreviewRes(r)}
