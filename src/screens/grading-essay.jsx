@@ -1,6 +1,115 @@
 import React from 'react';
 import { Icon } from '../icons';
 
+const ESSAY_RUBRIC_ITEMS = [
+  { k: 'a', name: '논지의 명확성', max: 3, aliases: ['논지', '명확', '주장', '완성'] },
+  { k: 'b', name: '근거의 적절성', max: 3, aliases: ['근거', '자료', '인용', '적절'] },
+  { k: 'c', name: '논리적 구성', max: 2, aliases: ['논리', '구성', '구조', '전개'] },
+  { k: 'd', name: '문장 표현', max: 2, aliases: ['문장', '표현', '스타일', '가독'] },
+];
+
+function parseMaybeJson(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object') return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return [];
+  }
+}
+
+function asTextList(value) {
+  if (!value) return [];
+
+  const items = parseMaybeJson(value);
+  if (Array.isArray(items)) {
+    return items.map(item => {
+      if (typeof item === 'string') return item;
+      return item?.title || item?.reason || item?.suggestion || item?.name || item?.message || '';
+    }).filter(Boolean);
+  }
+
+  if (typeof value === 'string') {
+    return value.split(/\r?\n|•|- /).map(item => item.trim()).filter(Boolean);
+  }
+
+  if (typeof items === 'object') {
+    return Object.values(items).map(item => {
+      if (typeof item === 'string') return item;
+      return item?.title || item?.reason || item?.suggestion || item?.name || item?.message || '';
+    }).filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeScore(value) {
+  if (value == null || value === '') return null;
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return null;
+  return +(numberValue > 10 ? numberValue / 10 : numberValue).toFixed(1);
+}
+
+function clampScore(value, max) {
+  const numberValue = Number(value);
+  if (Number.isNaN(numberValue)) return 0;
+  return +Math.min(Math.max(numberValue, 0), max).toFixed(1);
+}
+
+function firstScore(...values) {
+  for (const value of values) {
+    const score = normalizeScore(value);
+    if (score != null) return score;
+  }
+  return 0;
+}
+
+function scoreMapFromCategories(categoryScores, fallbackTotal) {
+  const next = Object.fromEntries(ESSAY_RUBRIC_ITEMS.map(item => [item.k, 0]));
+  const rawCategories = parseMaybeJson(categoryScores);
+  const categories = Array.isArray(rawCategories)
+    ? rawCategories
+    : rawCategories && typeof rawCategories === 'object'
+      ? Object.entries(rawCategories).map(([name, score]) => (
+          typeof score === 'object' ? { name, ...score } : { name, score }
+        ))
+      : [];
+  const used = new Set();
+
+  if (categories.length > 0) {
+    categories.forEach((category, index) => {
+      const name = String(category?.name || category?.title || category?.category || category?.criterion || '').toLowerCase();
+      let target = ESSAY_RUBRIC_ITEMS.find(item => item.aliases.some(alias => name.includes(alias.toLowerCase())));
+      if (!target) target = ESSAY_RUBRIC_ITEMS[index];
+      if (!target || used.has(target.k)) return;
+
+      const rawScore = Number(category?.score ?? category?.value ?? category?.points ?? 0);
+      const rawMax = Number(category?.max_score ?? category?.max ?? category?.maxScore ?? target.max);
+      const scaled = rawMax && rawMax !== target.max ? (rawScore / rawMax) * target.max : rawScore;
+      next[target.k] = clampScore(scaled, target.max);
+      used.add(target.k);
+    });
+
+    return next;
+  }
+
+  const total = firstScore(fallbackTotal);
+  ESSAY_RUBRIC_ITEMS.forEach(item => {
+    next[item.k] = clampScore((total / 10) * item.max, item.max);
+  });
+  return next;
+}
+
+function sumScores(scores) {
+  return +ESSAY_RUBRIC_ITEMS.reduce((sum, item) => sum + Number(scores[item.k] || 0), 0).toFixed(1);
+}
+
+function feedbackDraftFrom(student) {
+  return student?.taFeedback || student?.ta_feedback || student?.summary || student?.feedback || '';
+}
+
 export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpenSimilarity, onRegenerate, submissionContent, focusedStudent }) {
   const [tab, setTab] = React.useState("submission");      // submission / ai / similarity
   const [editing, setEditing] = React.useState(false);
@@ -11,13 +120,20 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
   const [draft, setDraft] = React.useState("");
 
   React.useEffect(() => {
-    if (focusedStudent) {
-      setFinal(focusedStudent.finalScore ?? focusedStudent.aiScore ?? 0);
-    }
-  }, [focusedStudent]);
+    if (!focusedStudent) return;
 
-  const total = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
-  React.useEffect(() => { setFinal(total); }, [total]);
+    const nextScores = scoreMapFromCategories(
+      focusedStudent.categoryScores || focusedStudent.category_scores,
+      focusedStudent.aiScore ?? focusedStudent.ai_score ?? focusedStudent.finalScore ?? focusedStudent.final_score
+    );
+    const recommended = sumScores(nextScores);
+    const persistedFinal = firstScore(focusedStudent.finalScore, focusedStudent.final_score);
+    const shouldUsePersistedFinal = focusedStudent.status === 'graded' || persistedFinal > 0;
+
+    setScores(nextScores);
+    setFinal(shouldUsePersistedFinal ? persistedFinal : recommended);
+    setDraft(feedbackDraftFrom(focusedStudent));
+  }, [focusedStudent, setScores, setFinal, setDraft]);
 
   const [aiChecks, setAiChecks] = React.useState([
     { type: "info", message: "작중 직접 인용 2건 — 모두 원문과 일치 (그레테 3장 발화 / 그레고르 1장 내적 독백)" },
@@ -45,6 +161,7 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
       onOpenSimilarity={onOpenSimilarity}
       aiChecks={aiChecks}
       setAiChecks={setAiChecks}
+      focusedStudent={focusedStudent}
     />
   );
 
@@ -323,25 +440,20 @@ function AIPanel({
   scores, setScores, tone, setTone,
   draft, setDraft,
   finalScore, setFinalScore, onApprove, onRegenerate, onOpenWarn, onOpenSimilarity,
-  aiChecks, setAiChecks,
+  aiChecks, setAiChecks, focusedStudent,
 }) {
   const [regenerating, setRegenerating] = React.useState(false);
-  const aiRecommended = +(scores.a + scores.b + scores.c + scores.d).toFixed(1);
-  const sameAsAI = finalScore === aiRecommended;
-  const rubricItems = [
-    { k: "a", name: "논지의 명확성", max: 3 },
-    { k: "b", name: "근거의 적절성", max: 3, warn: true },
-    { k: "c", name: "논리적 구성", max: 2 },
-    { k: "d", name: "문장 표현", max: 2 },
-  ];
-  const [strengths, setStrengths] = React.useState([
-    "소외를 가족·노동·자아 세 층위로 정리한 구조가 명확함",
-    "2문단에서 그레테의 발화를 직접 인용해 분석을 뒷받침함"
-  ]);
-  const [weaknesses, setWeaknesses] = React.useState([
-    "3문단: 마르크스 이론을 일반론으로만 인용, 작품 텍스트와 연결 약함",
-    "결론이 도입부에서 제시한 세 층위를 충분히 종합하지 못함"
-  ]);
+  const aiRecommended = sumScores(scores);
+  const sameAsAI = Math.abs(aiRecommended - Number(finalScore || 0)) < 0.05;
+  const rubricItems = ESSAY_RUBRIC_ITEMS;
+  const [strengths, setStrengths] = React.useState([]);
+  const [weaknesses, setWeaknesses] = React.useState([]);
+
+  React.useEffect(() => {
+    setStrengths(asTextList(focusedStudent?.strengths));
+    const nextWeaknesses = asTextList(focusedStudent?.weaknesses);
+    setWeaknesses(nextWeaknesses.length > 0 ? nextWeaknesses : ['등록된 개선 항목이 없습니다']);
+  }, [focusedStudent]);
 
   const handleRegenerate = async () => {
     if (!onRegenerate || regenerating) return;
@@ -353,13 +465,18 @@ function AIPanel({
         try {
           // JSON 파싱 시도
           const data = typeof response === 'string' ? JSON.parse(response) : response;
-          if (data.feedback) setDraft(data.feedback);
-          if (data.score !== undefined) setFinalScore(data.score);
-          if (data.strengths && Array.isArray(data.strengths)) setStrengths(data.strengths);
-          if (data.weaknesses && Array.isArray(data.weaknesses)) setWeaknesses(data.weaknesses);
+          const nextDraft = data.ta_feedback || data.feedback || data.summary;
+          if (nextDraft) setDraft(nextDraft);
+          if (data.score !== undefined || data.final_score !== undefined || data.ai_score !== undefined) {
+            setFinalScore(firstScore(data.final_score, data.score, data.ai_score));
+          }
+          if (data.strengths) setStrengths(asTextList(data.strengths));
+          if (data.weaknesses) setWeaknesses(asTextList(data.weaknesses));
           if (data.aiChecks && Array.isArray(data.aiChecks)) setAiChecks(data.aiChecks);
-          if (data.categoryScores) {
-            setScores(prev => ({ ...prev, ...data.categoryScores }));
+          if (data.categoryScores || data.category_scores) {
+            const nextScores = scoreMapFromCategories(data.categoryScores || data.category_scores, data.score || data.ai_score);
+            setScores(nextScores);
+            if (data.final_score === undefined && data.score === undefined) setFinalScore(sumScores(nextScores));
           }
         } catch (e) {
           // 파싱 실패 시 일반 텍스트 피드백으로 취급

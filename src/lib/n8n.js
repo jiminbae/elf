@@ -73,6 +73,13 @@ function normalizeStudentResult(data) {
   };
 }
 
+function normalizeSubmissionContent(data) {
+  const item = unwrapFirst(data) || {};
+  const record = item.json || item;
+  const content = unwrapFirst(record.content || record.data || record.submission || record) || {};
+  return content.json || content;
+}
+
 function normalizeQueueStudent(student) {
   return {
     id: student.submission_id || student.id,
@@ -180,7 +187,7 @@ export const n8nService = {
 
   async getSubmissionContent(submissionId) {
     const data = await callWebhook(WEBHOOKS.submissionContent, { submission_id: submissionId });
-    return data?.content || data;
+    return normalizeSubmissionContent(data);
   },
 
   async regenerateFeedback(submissionId, tone = 'encouraging') {

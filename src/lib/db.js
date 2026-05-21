@@ -49,6 +49,26 @@ function codeToTokens(content) {
   return String(content || '').split(/\r?\n/).map(line => ([{ t: line || ' ', c: line.trim().startsWith('#') ? 'cmt' : '' }]));
 }
 
+function extractSubmissionText(source = {}) {
+  return String(
+    source.content
+    || source.text
+    || source.body
+    || source.file_content
+    || source.submission_file_content
+    || source.submission_content
+    || ''
+  );
+}
+
+function textToEssayParagraphs(content) {
+  const text = String(content || '').trim();
+  if (!text) return [];
+
+  const blocks = text.split(/\n\s*\n/).map(block => block.trim()).filter(Boolean);
+  return (blocks.length > 0 ? blocks : [text]).map(block => ([{ t: block }]));
+}
+
 function parseJson(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -210,21 +230,30 @@ export const dbService = {
     try {
       const n8nContent = await n8nService.getSubmissionContent(submissionId);
       if (n8nContent) {
+        const content = extractSubmissionText(n8nContent);
+
         if (assignmentType === 'essay') {
           return {
-            title: n8nContent.filename || '제출 내용',
+            filename: n8nContent.filename || n8nContent.file_name || 'submission.txt',
+            title: n8nContent.title || n8nContent.filename || n8nContent.file_name || '제출물',
             author: '',
             course: '',
-            paragraphs: String(n8nContent.content || '').split(/\n\s*\n/).filter(Boolean),
+            characters: content.length || n8nContent.characters || 0,
+            bytes: n8nContent.bytes || n8nContent.file_size || getTextByteSize(content),
+            submittedAt: n8nContent.submittedAt || n8nContent.submitted_at,
+            content,
+            paragraphs: textToEssayParagraphs(content),
+            filePath: n8nContent.filePath || n8nContent.file_path || '',
+            mime: n8nContent.mime || n8nContent.file_mime || '',
           };
         }
 
         return {
           filename: n8nContent.filename || n8nContent.file_name || 'code.py',
-          lines: n8nContent.lines || 0,
-          bytes: n8nContent.bytes || n8nContent.file_size || 0,
+          lines: n8nContent.lines || (content ? content.split(/\r?\n/).length : 0),
+          bytes: n8nContent.bytes || n8nContent.file_size || getTextByteSize(content),
           submittedAt: n8nContent.submittedAt || n8nContent.submitted_at,
-          tokens: Array.isArray(n8nContent.tokens) ? n8nContent.tokens : codeToTokens(n8nContent.content || ''),
+          tokens: Array.isArray(n8nContent.tokens) ? n8nContent.tokens : codeToTokens(content),
           filePath: n8nContent.filePath || n8nContent.file_path || '',
           mime: n8nContent.mime || n8nContent.file_mime || '',
         };
@@ -244,11 +273,17 @@ export const dbService = {
 
       if (!error && data) {
         if (assignmentType === 'essay') {
+          const content = extractSubmissionText(data);
           return {
-            title: data.essay_title || '제목 없음',
+            filename: data.filename || data.file_name || 'submission.txt',
+            title: data.essay_title || data.filename || data.file_name || '제출물',
             author: data.essay_author || '저자 없음',
             course: data.essay_course || '과목 없음',
-            paragraphs: data.paragraphs || []
+            characters: content.length || data.characters || 0,
+            bytes: data.bytes || data.file_size || getTextByteSize(content),
+            submittedAt: data.created_at,
+            content,
+            paragraphs: Array.isArray(data.paragraphs) && data.paragraphs.length > 0 ? data.paragraphs : textToEssayParagraphs(content)
           };
         }
 
@@ -294,16 +329,23 @@ export const dbService = {
         return null;
       }
 
+      const content = extractSubmissionText(submission);
+
       if (assignmentType === 'essay') {
         return {
-          title: submission.file_name || '제출 내용',
+          filename: submission.file_name || 'submission.txt',
+          title: submission.file_name || '제출물',
           author: '',
           course: '',
-          paragraphs: String(submission.content || '').split(/\n\s*\n/).filter(Boolean),
+          characters: content.length,
+          bytes: submission.file_size || getTextByteSize(content),
+          submittedAt: submission.submitted_at || submission.created_at,
+          content,
+          paragraphs: textToEssayParagraphs(content),
+          filePath: submission.file_path || '',
+          mime: submission.file_mime || '',
         };
       }
-
-      const content = submission.content || '';
 
       return {
         filename: submission.file_name || 'code.py',
