@@ -86,8 +86,17 @@ function buildStudentAssignmentList(assignments, studentAssignments) {
     };
   });
 
-  const assignmentIds = new Set(assignments.map(a => a.id));
-  const extraSubmitted = studentAssignments.filter(item => !assignmentIds.has(item.assignmentId || item.assignment_id || item.id));
+  const assignmentIds = new Set(assignments.map(a => a.id ? String(a.id).trim() : ''));
+  const assignmentTitles = new Set(assignments.map(a => a.title ? String(a.title).trim() : ''));
+
+  const extraSubmitted = studentAssignments.filter(item => {
+    const id = item.assignmentId || item.assignment_id || item.id;
+    const title = item.title;
+    const strId = id ? String(id).trim() : '';
+    const strTitle = title ? String(title).trim() : '';
+    return !assignmentIds.has(strId) && !assignmentTitles.has(strTitle);
+  });
+
   return [...fromAssignments, ...extraSubmitted];
 }
 
