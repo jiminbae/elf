@@ -46,6 +46,39 @@ async function fileToText(file) {
   }
 }
 
+// 제출물 상세 내용에서 plain text 추출 (Gemini 전송용)
+function extractPlainText(content, assignmentType) {
+  if (!content) return '';
+  if (assignmentType === 'essay') {
+    if (content.content) return content.content;
+    return (content.paragraphs || []).map(p => {
+      if (Array.isArray(p)) return p.map(r => r.t || '').join('');
+      return (p.runs || []).map(r => r.t || '').join('');
+    }).join('\n\n');
+  }
+  // code: tokens = [[{t, c}], ...]
+  return (content.tokens || []).map(line =>
+    Array.isArray(line) ? line.map(tok => tok.t || '').join('') : ''
+  ).join('\n');
+}
+
+// Gemini /api/grade 호출
+async function callGeminiGrade({ content, rubric, assignment_type, filename }) {
+  try {
+    const resp = await fetch('/api/grade', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content, rubric, assignment_type, filename }),
+    });
+    const json = await resp.json();
+    if (json.success && json.data) return json.data;
+    console.warn('Gemini grade failed:', json.message);
+  } catch (err) {
+    console.warn('callGeminiGrade error:', err.message);
+  }
+  return null;
+}
+
 function buildRubricWithReference(rubric, referenceFileName, referenceText) {
   const baseRubric = String(rubric || '').trim();
   const cleanReference = String(referenceText || '').trim();
@@ -250,21 +283,48 @@ export default function Home() {
         }),
       ]);
 
-      setFocusedFeedback(feedbackResult?.result || null);
+      // n8n 피드백이 있으면 우선 사용
+      const n8nFeedback = feedbackResult?.result || null;
+      setFocusedFeedback(n8nFeedback);
 
+      let resolvedContent = data;
       if (!data && focusedSubmission?.content) {
         const content = focusedSubmission.content;
-        setDetailedContent({
+        resolvedContent = {
           filename: focusedSubmission.fileName || 'code.py',
           lines: String(content).split(/\r?\n/).length,
           bytes: focusedSubmission.fileSize || new TextEncoder().encode(String(content)).length,
           submittedAt: focusedSubmission.submittedAt,
           tokens: String(content).split(/\r?\n/).map(line => ([{ t: line || ' ', c: line.trim().startsWith('#') ? 'cmt' : '' }])),
-        });
-        return;
+        };
       }
+      setDetailedContent(resolvedContent);
 
-      setDetailedContent(data);
+      // n8n에 AI 피드백(점수/강점/약점 등)이 없으면 Gemini로 자동 채점
+      const hasAiFeedback = n8nFeedback && (
+        n8nFeedback.ai_score != null ||
+        n8nFeedback.ta_feedback ||
+        n8nFeedback.feedback ||
+        n8nFeedback.summary
+      );
+      const alreadyGraded = focusedSubmission?.status === 'graded';
+
+      if (!hasAiFeedback && !alreadyGraded && resolvedContent) {
+        const textContent = extractPlainText(resolvedContent, currentAssn.type);
+        if (textContent.trim().length > 30) {
+          const geminiResult = await callGeminiGrade({
+            content: textContent,
+            rubric: currentAssn.rubric || '',
+            assignment_type: currentAssn.type,
+            filename: resolvedContent.filename,
+          });
+          if (geminiResult) {
+            setFocusedFeedback(geminiResult);
+            // DB에 AI 결과 저장 (비동기, 실패해도 UI는 정상 동작)
+            dbService.saveAiFeedback(focusedId, geminiResult).catch(() => {});
+          }
+        }
+      }
     }
     loadContent();
   }, [focusedId, activeAssn, assignmentsList, submissionsList, mounted]);
@@ -350,10 +410,17 @@ export default function Home() {
         rubric,
         description: draft.description || '',
         deadline: draft.deadlineLabel || draft.deadline || '',
+        // n8n Normalize Assignment 노드가 기대하는 rubric_file 객체 형식
+        rubric_file: referenceFile ? {
+          name: referenceFileName,
+          type: referenceFile.type || '',
+          size: referenceFile.size || 0,
+          base64: referenceFileBase64,
+        } : null,
+        // Supabase 직접 fallback용 flat 필드도 함께 전송
         reference_file_name: referenceFileName,
         reference_file_mime: referenceFile?.type || '',
         reference_file_size: referenceFile?.size || 0,
-        reference_file_base64: referenceFileBase64,
         reference_file_content: referenceFileContent,
       });
 
@@ -362,15 +429,19 @@ export default function Home() {
       }
 
       openCreatedAssignment(created);
-      showToast("새 과제가 n8n에 저장되었습니다.", "good");
+      // n8n을 거쳤는지 Supabase 직접인지 구분 (id가 UUID면 Supabase)
+      const viaSupabase = created.id && String(created.id).includes('-');
+      showToast(
+        viaSupabase
+          ? "새 과제가 Supabase에 저장되었습니다. (루브릭 포함)"
+          : "새 과제가 n8n에 저장되었습니다.",
+        "good"
+      );
       return;
     } catch (err) {
-      if (err.result?.configured !== false) {
-        console.warn('n8n assignment create failed:', err.message);
-      }
+      console.error('과제 생성 실패:', err.message);
+      showToast("과제 생성에 실패했습니다: " + err.message);
     }
-
-    showToast("n8n 과제 생성에 실패했습니다.");
   };
 
   if (!mounted) {
@@ -467,7 +538,15 @@ export default function Home() {
         score,
         'graded',
         taFeedback,
-        categoryScores
+        categoryScores,
+        {
+          aiScore: focused.aiScore,
+          strengths: focused.strengths,
+          weaknesses: focused.weaknesses,
+          mistakes: focused.mistakes,
+          learningRecommendations: focused.learningRecommendations,
+          nextSteps: focused.nextSteps,
+        }
       );
 
       if (n8nSynced) {

@@ -15,16 +15,22 @@ const SAMPLE_STUDENTS = [
 ].map(student => ({ id: student.studentId, ...student }));
 
 // Helper to safely format submission from DB structure to application structure
+// n8n 워크플로우는 AI 결과를 별도 feedbacks 테이블에 저장하므로 join 결과도 처리
 function mapSubmission(item) {
   const student = item.student || {};
+  // Supabase join 시 feedbacks는 배열로 반환됨 (1:N 관계)
+  const fbArr = item.feedbacks;
+  const fb = Array.isArray(fbArr) ? (fbArr[0] || {}) : (fbArr || {});
   return {
     id: item.id,
-    submission_id: item.id, // reference helper
-    no: student.student_no || student.student_id || '',
-    name: student.student_name || student.name || '알 수 없음',
+    submission_id: item.id,
+    feedback_id: fb.id || item.feedback_id,
+    no: student.student_no || student.student_id || item.student_id || '',
+    name: student.student_name || student.name || item.student_name || '알 수 없음',
     submittedAt: item.submitted_at,
-    aiScore: item.ai_score,
-    finalScore: item.final_score,
+    aiScore: fb.ai_score ?? item.ai_score,
+    finalScore: fb.final_score ?? item.final_score,
+    grade: fb.grade || item.grade,
     status: item.status,
     suspicion: item.suspicion,
     similarity: item.similarity,
@@ -32,7 +38,13 @@ function mapSubmission(item) {
     hasSimWarning: item.has_sim_warning,
     isFocus: item.is_focus,
     tests: item.tests,
-    taFeedback: item.ta_feedback || item.feedback || '',
+    taFeedback: fb.ta_feedback || item.ta_feedback || item.feedback || '',
+    categoryScores: fb.category_scores || item.category_scores,
+    strengths: fb.strengths || item.strengths,
+    weaknesses: fb.weaknesses || item.weaknesses,
+    mistakes: fb.mistakes || item.mistakes,
+    learningRecommendations: fb.learning_recommendations || item.learning_recommendations,
+    nextSteps: fb.next_steps || item.next_steps,
   };
 }
 
@@ -122,7 +134,55 @@ export const dbService = {
   },
 
   async createAssignment(payload) {
-    return n8nService.createAssignment(payload);
+    // 1. n8n 우선
+    try {
+      const assignment = await n8nService.createAssignment(payload);
+      if (assignment.id) return assignment;
+    } catch (err) {
+      if (err.result?.configured !== false) {
+        console.warn('n8n createAssignment failed, falling back to Supabase:', err.message);
+      }
+    }
+
+    // 2. Supabase 직접 INSERT fallback
+    if (!supabase.isConfigured) {
+      throw new Error('과제 생성 실패: n8n과 Supabase 모두 설정되지 않았습니다.');
+    }
+
+    const { data, error } = await supabase
+      .from('assignments')
+      .insert({
+        title: payload.title,
+        type: payload.type || payload.assignment_type || 'essay',
+        rubric: payload.rubric || '',
+        description: payload.description || '',
+        deadline: payload.deadline || null,
+        reference_file_name: payload.reference_file_name || '',
+        reference_file_mime: payload.reference_file_mime || '',
+        reference_file_size: payload.reference_file_size || 0,
+        reference_file_content: payload.reference_file_content || '',
+      })
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+
+    return {
+      id: data.id,
+      course: data.course || '',
+      courseShort: data.course_short || '',
+      title: data.title,
+      deadline: data.deadline || payload.deadline || '',
+      avg: 0,
+      aiAvg: 0,
+      graded: 0,
+      total: 0,
+      type: data.type || 'essay',
+      description: data.description || '',
+      rubric: data.rubric || '',
+      referenceFileName: data.reference_file_name || '',
+      createdAt: data.created_at,
+    };
   },
   // 1. Fetch Assignments
   async getAssignments() {
@@ -207,9 +267,10 @@ export const dbService = {
     }
 
     try {
+      // feedbacks 테이블도 join — n8n이 AI 결과를 feedbacks에 저장하기 때문
       const { data, error } = await supabase
         .from('submissions')
-        .select('*, student:students(*)')
+        .select('*, student:students(*), feedbacks(id, ai_score, final_score, grade, ta_feedback, category_scores, strengths, weaknesses, mistakes, test_results, learning_recommendations, next_steps, status)')
         .eq('assignment_id', assignmentId)
         .order('id', { ascending: true });
 
@@ -363,7 +424,7 @@ export const dbService = {
   },
 
   // 4. Update submission scores and status
-  async updateGrade(submissionId, score, status = 'graded', feedback = '', categoryScores = []) {
+  async updateGrade(submissionId, score, status = 'graded', feedback = '', categoryScores = [], aiFields = {}) {
     try {
       if (!supabase.isConfigured) {
         return { success: false, skipped: true, error: 'Supabase credentials not configured' };
@@ -383,6 +444,17 @@ export const dbService = {
         updatePayload.category_scores = categoryScores;
       }
 
+      // AI 채점 보조 필드 저장
+      const { aiScore, strengths, weaknesses, mistakes, learningRecommendations, nextSteps } = aiFields || {};
+      if (aiScore != null) updatePayload.ai_score = aiScore;
+      if (Array.isArray(strengths) && strengths.length > 0) updatePayload.strengths = strengths;
+      if (Array.isArray(weaknesses) && weaknesses.length > 0) updatePayload.weaknesses = weaknesses;
+      if (Array.isArray(mistakes) && mistakes.length > 0) updatePayload.mistakes = mistakes;
+      if (Array.isArray(learningRecommendations) && learningRecommendations.length > 0) {
+        updatePayload.learning_recommendations = learningRecommendations;
+      }
+      if (Array.isArray(nextSteps) && nextSteps.length > 0) updatePayload.next_steps = nextSteps;
+
       const { data, error } = await supabase
         .from('submissions')
         .update(updatePayload)
@@ -392,9 +464,90 @@ export const dbService = {
       if (error) {
         throw new Error(error.message);
       }
+
+      // n8n grade/approve 플로우와 동일하게 feedbacks 테이블도 업데이트
+      const feedbackPayload = {
+        final_score: score,
+        ta_feedback: feedback || undefined,
+        status: 'approved',
+      };
+      if (Array.isArray(categoryScores) && categoryScores.length > 0) feedbackPayload.category_scores = categoryScores;
+      if (aiScore != null) feedbackPayload.ai_score = aiScore;
+      if (Array.isArray(strengths) && strengths.length > 0) feedbackPayload.strengths = strengths;
+      if (Array.isArray(weaknesses) && weaknesses.length > 0) feedbackPayload.weaknesses = weaknesses;
+      if (Array.isArray(mistakes) && mistakes.length > 0) feedbackPayload.mistakes = mistakes;
+      if (Array.isArray(learningRecommendations) && learningRecommendations.length > 0) feedbackPayload.learning_recommendations = learningRecommendations;
+      if (Array.isArray(nextSteps) && nextSteps.length > 0) feedbackPayload.next_steps = nextSteps;
+
+      const { data: existingFb } = await supabase
+        .from('feedbacks')
+        .select('id')
+        .eq('submission_id', submissionId)
+        .maybeSingle();
+
+      if (existingFb) {
+        await supabase.from('feedbacks').update(feedbackPayload).eq('submission_id', submissionId);
+      } else {
+        await supabase.from('feedbacks').insert({ submission_id: submissionId, ...feedbackPayload });
+      }
+
       return { success: true, data };
     } catch (err) {
       console.error(`Failed to update grade for submission ${submissionId}:`, err);
+      return { success: false, error: err.message };
+    }
+  },
+
+  // 4-b. AI 피드백 저장 (채점 전 자동 저장용)
+  // n8n 워크플로우와 동일하게 feedbacks 테이블에 upsert
+  async saveAiFeedback(submissionId, aiData) {
+    if (!supabase.isConfigured) return { success: false, skipped: true };
+
+    const payload = { submission_id: submissionId };
+    if (aiData.ai_score != null) payload.ai_score = aiData.ai_score;
+    if (aiData.final_score != null) payload.final_score = aiData.final_score;
+    if (aiData.grade) payload.grade = aiData.grade;
+    if (Array.isArray(aiData.category_scores) && aiData.category_scores.length > 0) payload.category_scores = aiData.category_scores;
+    if (Array.isArray(aiData.strengths) && aiData.strengths.length > 0) payload.strengths = aiData.strengths;
+    if (Array.isArray(aiData.weaknesses) && aiData.weaknesses.length > 0) payload.weaknesses = aiData.weaknesses;
+    if (Array.isArray(aiData.mistakes) && aiData.mistakes.length > 0) payload.mistakes = aiData.mistakes;
+    if (Array.isArray(aiData.learning_recommendations) && aiData.learning_recommendations.length > 0) {
+      payload.learning_recommendations = aiData.learning_recommendations;
+    }
+    if (Array.isArray(aiData.next_steps) && aiData.next_steps.length > 0) payload.next_steps = aiData.next_steps;
+    const feedbackText = aiData.ta_feedback || aiData.feedback || aiData.summary;
+    if (feedbackText) payload.ta_feedback = feedbackText;
+    payload.status = 'ai_draft';
+
+    try {
+      // 기존 feedbacks 레코드 확인
+      const { data: existing } = await supabase
+        .from('feedbacks')
+        .select('id, status')
+        .eq('submission_id', submissionId)
+        .maybeSingle();
+
+      if (existing) {
+        if (existing.status === 'approved') return { success: true, skipped: true }; // 이미 승인된 항목은 덮어쓰지 않음
+        const { data, error } = await supabase
+          .from('feedbacks')
+          .update(payload)
+          .eq('submission_id', submissionId)
+          .select();
+        if (error) { console.warn('saveAiFeedback update error:', error.message); return { success: false, error: error.message }; }
+        return { success: true, data };
+      } else {
+        const { data, error } = await supabase
+          .from('feedbacks')
+          .insert(payload)
+          .select();
+        if (error) { console.warn('saveAiFeedback insert error:', error.message); return { success: false, error: error.message }; }
+        // submissions 상태를 ai_graded로 업데이트 (n8n과 동일하게)
+        await supabase.from('submissions').update({ status: 'ai_graded' }).eq('id', submissionId);
+        return { success: true, data };
+      }
+    } catch (err) {
+      console.error('saveAiFeedback failed:', err);
       return { success: false, error: err.message };
     }
   },
