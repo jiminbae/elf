@@ -152,7 +152,10 @@ export function GradingCode({ aiLayout = "right", onApprove, onRegenerate, submi
     const shouldUsePersistedFinal = focusedStudent.status === 'graded' || persistedFinal > 0;
     setFinal(shouldUsePersistedFinal ? persistedFinal : recommended);
     setDraft(feedbackDraftFrom(focusedStudent));
-  }, [focusedStudent, setScores, setFinal, setDraft]);
+    // Depend on the student id only — `focusedStudent` is recreated each parent render,
+    // so depending on the whole object would clobber TA edits on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedStudent?.id]);
 
   const aiPanel = (
     <CodeAIPanel

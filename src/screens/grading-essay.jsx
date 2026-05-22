@@ -133,7 +133,10 @@ export function GradingEssay({ aiLayout = "right", onApprove, onOpenWarn, onOpen
     setScores(nextScores);
     setFinal(shouldUsePersistedFinal ? persistedFinal : recommended);
     setDraft(feedbackDraftFrom(focusedStudent));
-  }, [focusedStudent, setScores, setFinal, setDraft]);
+    // Depend on the student id only — `focusedStudent` is recreated each parent render,
+    // so depending on the whole object would clobber TA edits on every re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedStudent?.id]);
 
   const [aiChecks, setAiChecks] = React.useState([
     { type: "info", message: "작중 직접 인용 2건 — 모두 원문과 일치 (그레테 3장 발화 / 그레고르 1장 내적 독백)" },
