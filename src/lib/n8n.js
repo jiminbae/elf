@@ -88,6 +88,8 @@ function normalizeQueueStudent(student) {
     no: student.no || student.student_id || '-',
     name: student.name || student.student_name || '이름 없음',
     submittedAt: student.submittedAt || student.submitted_at || '-',
+    gradedAt: student.gradedAt || student.graded_at || '',
+    grader: student.grader || '',
     aiScore: normalizeScore(student.aiScore ?? student.ai_score),
     finalScore: normalizeScore(student.finalScore ?? student.final_score),
     status: student.status,

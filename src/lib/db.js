@@ -578,8 +578,17 @@ export const dbService = {
             total: 10,
             avg: queue.assignment?.avg || null,
             submittedAt: row.submittedAt || '',
+            gradedAt: row.gradedAt || row.graded_at || '',
             deadline: queue.assignment?.deadline || '',
-            grader: row.status === 'graded' ? 'TA' : '',
+            grader: row.grader || (row.status === 'graded' ? 'TA' : ''),
+            fileName: row.fileName || row.file_name || '',
+            taFeedback: row.taFeedback || row.ta_feedback || row.feedback || row.summary || '',
+            category_scores: row.categoryScores || row.category_scores || [],
+            strengths: row.strengths || [],
+            weaknesses: row.weaknesses || [],
+            mistakes: row.mistakes || [],
+            learning_recommendations: row.learningRecommendations || row.learning_recommendations || [],
+            next_steps: row.nextSteps || row.next_steps || [],
           }));
         }
       } catch (err) {
@@ -606,6 +615,8 @@ export const dbService = {
           score: sub.final_score ?? sub.ai_score ?? 0,
           total: 10,
           submittedAt: sub.submitted_at || sub.created_at || '',
+          gradedAt: sub.graded_at || '',
+          grader: sub.grader || (sub.status === 'graded' ? 'TA' : ''),
           deadline: '',
           fileName: sub.file_name || '',
           taFeedback: sub.ta_feedback || sub.feedback || '',
