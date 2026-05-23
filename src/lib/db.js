@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { n8nService } from './n8n';
-import { mockStore } from './mockStore';
 
 const SAMPLE_STUDENTS = [
   { studentName: '김민준', studentId: '20240001', email: 'minjun.kim@example.com' },
@@ -131,7 +130,6 @@ export const dbService = {
       }
     }
 
-    if (mockStore.isActive()) return mockStore.getStudents();
     return SAMPLE_STUDENTS;
   },
 
@@ -230,7 +228,6 @@ export const dbService = {
 
       if (error || !data || data.length === 0) {
         if (error) console.warn('Assignment fetch failed:', error.message);
-        if (mockStore.isActive()) return mockStore.getAssignments();
         return [];
       }
 
@@ -252,7 +249,6 @@ export const dbService = {
       }));
     } catch (err) {
       console.error('Failed to fetch assignments:', err);
-      if (mockStore.isActive()) return mockStore.getAssignments();
       return [];
     }
   },
@@ -280,25 +276,18 @@ export const dbService = {
 
       if (error || !data || data.length === 0) {
         if (error) console.warn(`Submission fetch failed for assignment ${assignmentId}:`, error.message);
-        if (mockStore.isActive()) return mockStore.getSubmissionsForAssignment(assignmentId);
         return [];
       }
 
       return data.map(mapSubmission);
     } catch (err) {
       console.error(`Failed to fetch submissions for ${assignmentId}:`, err);
-      if (mockStore.isActive()) return mockStore.getSubmissionsForAssignment(assignmentId);
       return [];
     }
   },
 
   // 3. Fetch detailed contents of a specific submission
   async getSubmissionContent(submissionId, assignmentType, fallback = {}) {
-    if (mockStore.isActive()) {
-      const mockContent = mockStore.getSubmissionContent(submissionId, assignmentType);
-      if (mockContent) return mockContent;
-    }
-
     try {
       const n8nContent = await n8nService.getSubmissionContent(submissionId);
       if (n8nContent) {
@@ -438,9 +427,6 @@ export const dbService = {
   async updateGrade(submissionId, score, status = 'graded', feedback = '', categoryScores = [], aiFields = {}) {
     try {
       if (!supabase.isConfigured) {
-        if (mockStore.isActive()) {
-          return mockStore.updateGrade(submissionId, score, status, feedback, categoryScores, aiFields);
-        }
         return { success: false, skipped: true, error: 'Supabase credentials not configured' };
       }
 
@@ -570,13 +556,6 @@ export const dbService = {
   async getStudentAssignments(studentNo) {
     try {
       if (!studentNo) return [];
-
-      // When neither Supabase nor any real backend is configured, return
-      // mock data so the student screen still demonstrates the full flow
-      // (TA edits are persisted in the same in-memory store).
-      if (mockStore.isActive()) {
-        return mockStore.getStudentAssignments(studentNo);
-      }
 
       try {
         const queue = await n8nService.getQueue();
