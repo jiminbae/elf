@@ -329,7 +329,9 @@ export default function Home() {
     loadContent();
   }, [focusedId, activeAssn, assignmentsList, submissionsList, mounted]);
 
-  // 4. Fetch student assignments when role changes to student
+  // 4. Fetch student assignments when role/view/student changes
+  //    view is included so that navigating dashboard → feedback re-fetches
+  //    in case the TA just approved in a separate tab/session
   React.useEffect(() => {
     if (role === 'student' && mounted && selectedStudentId) {
       async function loadStudent() {
@@ -338,7 +340,7 @@ export default function Home() {
       }
       loadStudent();
     }
-  }, [role, mounted, selectedStudentId]);
+  }, [role, mounted, selectedStudentId, view, studentAssnId]);
 
   React.useEffect(() => {
     if (typeof document !== 'undefined') {

@@ -599,34 +599,38 @@ export const dbService = {
 
       const { data: textSubmissions, error: textError } = await supabase
         .from('submissions')
-        .select('*')
+        .select('*, feedbacks(id, ai_score, final_score, grade, ta_feedback, category_scores, strengths, weaknesses, mistakes, test_results, learning_recommendations, next_steps, status)')
         .eq('student_id', studentNo);
 
       if (!textError && textSubmissions && textSubmissions.length > 0) {
-        return textSubmissions.map(sub => ({
-          id: sub.assignment_title || sub.id,
-          assignmentId: sub.assignment_title || sub.id,
-          submission_id: sub.id,
-          course: '',
-          courseShort: '',
-          title: sub.assignment_title || '',
-          type: sub.assignment_type || 'essay',
-          status: sub.status === 'ai_graded' ? 'pending' : sub.status,
-          score: sub.final_score ?? sub.ai_score ?? 0,
-          total: 10,
-          submittedAt: sub.submitted_at || sub.created_at || '',
-          gradedAt: sub.graded_at || '',
-          grader: sub.grader || (sub.status === 'graded' ? 'TA' : ''),
-          deadline: '',
-          fileName: sub.file_name || '',
-          taFeedback: sub.ta_feedback || sub.feedback || '',
-          category_scores: parseJson(sub.category_scores),
-          strengths: parseJson(sub.strengths),
-          weaknesses: parseJson(sub.weaknesses),
-          mistakes: parseJson(sub.mistakes),
-          learning_recommendations: parseJson(sub.learning_recommendations),
-          next_steps: parseJson(sub.next_steps),
-        }));
+        return textSubmissions.map(sub => {
+          const fbArr = sub.feedbacks;
+          const fb = Array.isArray(fbArr) ? (fbArr[0] || {}) : (fbArr || {});
+          return {
+            id: sub.assignment_title || sub.id,
+            assignmentId: sub.assignment_title || sub.id,
+            submission_id: sub.id,
+            course: '',
+            courseShort: '',
+            title: sub.assignment_title || '',
+            type: sub.assignment_type || 'essay',
+            status: sub.status === 'ai_graded' ? 'pending' : sub.status,
+            score: sub.final_score ?? fb.final_score ?? sub.ai_score ?? fb.ai_score ?? 0,
+            total: 10,
+            submittedAt: sub.submitted_at || sub.created_at || '',
+            gradedAt: sub.graded_at || '',
+            grader: sub.grader || (sub.status === 'graded' ? 'TA' : ''),
+            deadline: '',
+            fileName: sub.file_name || '',
+            taFeedback: fb.ta_feedback || sub.ta_feedback || sub.feedback || '',
+            category_scores: parseJson(fb.category_scores || sub.category_scores),
+            strengths: parseJson(fb.strengths || sub.strengths),
+            weaknesses: parseJson(fb.weaknesses || sub.weaknesses),
+            mistakes: parseJson(fb.mistakes || sub.mistakes),
+            learning_recommendations: parseJson(fb.learning_recommendations || sub.learning_recommendations),
+            next_steps: parseJson(fb.next_steps || sub.next_steps),
+          };
+        });
       }
 
       const { data: student } = await supabase
@@ -641,7 +645,7 @@ export const dbService = {
 
       const { data: submissions, error } = await supabase
         .from('submissions')
-        .select('*, assignment:assignments(*)')
+        .select('*, assignment:assignments(*), feedbacks(id, ai_score, final_score, grade, ta_feedback, category_scores, strengths, weaknesses, mistakes, test_results, learning_recommendations, next_steps, status)')
         .eq('student_id', student.id);
 
       if (error || !submissions || submissions.length === 0) {
@@ -650,31 +654,33 @@ export const dbService = {
 
       return submissions.map(sub => {
         const assn = sub.assignment || {};
+        const fbArr = sub.feedbacks;
+        const fb = Array.isArray(fbArr) ? (fbArr[0] || {}) : (fbArr || {});
         return {
           id: sub.id,
           assignmentId: sub.assignment_id || sub.assignment_title || sub.id,
           submission_id: sub.id,
-          feedback_id: sub.feedback_id,
+          feedback_id: fb.id || sub.feedback_id,
           course: assn.course || '',
           courseShort: assn.course_short || assn.course || '',
           title: assn.title || sub.assignment_title || '',
           type: assn.type || sub.assignment_type || 'essay',
           status: sub.status,
-          score: sub.final_score ?? sub.ai_score ?? 0,
+          score: sub.final_score ?? fb.final_score ?? sub.ai_score ?? fb.ai_score ?? 0,
           total: 10,
           avg: assn.avg || null,
           rank: sub.rank || '',
           gradedAt: sub.graded_at || '',
           submittedAt: sub.submitted_at || sub.created_at || '',
           deadline: assn.deadline || '',
-          grader: sub.grader || '',
-          taFeedback: sub.ta_feedback || sub.feedback || '',
-          category_scores: parseJson(sub.category_scores),
-          strengths: parseJson(sub.strengths),
-          weaknesses: parseJson(sub.weaknesses),
-          mistakes: parseJson(sub.mistakes),
-          learning_recommendations: parseJson(sub.learning_recommendations),
-          next_steps: parseJson(sub.next_steps),
+          grader: sub.grader || (sub.status === 'graded' ? 'TA' : ''),
+          taFeedback: fb.ta_feedback || sub.ta_feedback || sub.feedback || '',
+          category_scores: parseJson(fb.category_scores || sub.category_scores),
+          strengths: parseJson(fb.strengths || sub.strengths),
+          weaknesses: parseJson(fb.weaknesses || sub.weaknesses),
+          mistakes: parseJson(fb.mistakes || sub.mistakes),
+          learning_recommendations: parseJson(fb.learning_recommendations || sub.learning_recommendations),
+          next_steps: parseJson(fb.next_steps || sub.next_steps),
         };
       });
     } catch (err) {
